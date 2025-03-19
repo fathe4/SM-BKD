@@ -4,7 +4,8 @@ import helmet from "helmet";
 import morgan from "morgan";
 import { config } from "dotenv";
 import { errorHandler } from "./middlewares/errorHandler";
-import { logger } from "./utils/logger";
+import { logger, morganStream } from "./utils/logger";
+import authRoutes from "./routes/authRoutes";
 
 // Load environment variables
 config();
@@ -19,7 +20,7 @@ app.use(helmet()); // Security headers
 app.use(cors()); // Enable CORS for all routes
 app.use(express.json()); // Parse JSON request bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded request bodies
-app.use(morgan("dev")); // Request logging
+app.use(morgan("dev", { stream: morganStream })); // Request logging
 
 // Health check route
 app.get("/health", (req: Request, res: Response) => {
@@ -31,10 +32,12 @@ app.get("/health", (req: Request, res: Response) => {
   });
 });
 
-// API routes will be imported and used here
-// app.use(apiPrefix, authRoutes);
-// app.use(apiPrefix, userRoutes);
-// ...etc
+// API routes
+app.use(`${apiPrefix}/auth`, authRoutes);
+// Other routes will be added here as they are implemented
+// app.use(`${apiPrefix}/users`, userRoutes);
+// app.use(`${apiPrefix}/posts`, postRoutes);
+// etc.
 
 // 404 handler
 app.use((req: Request, res: Response) => {
@@ -51,7 +54,9 @@ app.use(errorHandler);
 if (process.env.NODE_ENV !== "test") {
   app.listen(port, () => {
     logger.info(
-      `Server running on port ${port} in ${process.env.NODE_ENV} mode`
+      `Server running on port ${port} in ${
+        process.env.NODE_ENV || "development"
+      } mode`
     );
     logger.info(`API accessible at http://localhost:${port}${apiPrefix}`);
   });

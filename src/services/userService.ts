@@ -67,6 +67,31 @@ export class UserService {
   }
 
   /**
+   * Find a user by username
+   */
+  static async findUserByUsername(username: string): Promise<User | null> {
+    try {
+      const { data, error } = await supabase
+        .from("users")
+        .select("*")
+        .eq("username", username)
+        .single();
+
+      if (error && error.code !== "PGRST116") {
+        logger.error("Error finding user by username:", error);
+        throw new AppError(error.message, 400);
+      }
+
+      return data as User | null;
+    } catch (error) {
+      logger.error("Error in findUserByUsername:", error);
+      throw error instanceof AppError
+        ? error
+        : new AppError("Failed to find user", 500);
+    }
+  }
+
+  /**
    * Find a user by ID
    */
   static async findUserById(id: string): Promise<User | null> {
@@ -260,7 +285,7 @@ export class UserService {
    */
   static async updateFriendshipStatus(
     friendshipId: string,
-    status: "accepted" | "rejected" | "blocked"
+    status: "pending" | "accepted" | "rejected" | "blocked"
   ): Promise<Friendship> {
     try {
       const { data, error } = await supabaseAdmin!
@@ -346,6 +371,59 @@ export class UserService {
       throw error instanceof AppError
         ? error
         : new AppError("Failed to register device", 500);
+    }
+  }
+
+  /**
+   * Update a user device
+   */
+  static async updateUserDevice(
+    userId: string,
+    deviceToken: string,
+    updateData: Partial<
+      Omit<UserDevice, "id" | "user_id" | "device_token" | "created_at">
+    >
+  ): Promise<UserDevice | null> {
+    try {
+      // Find the device first
+      const { data: existingDevice, error: findError } = await supabase
+        .from("user_devices")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("device_token", deviceToken)
+        .maybeSingle();
+
+      if (findError) {
+        logger.error("Error finding device:", findError);
+        throw new AppError(findError.message, 400);
+      }
+
+      if (!existingDevice) {
+        logger.warn(
+          `Device not found for user ${userId} with token ${deviceToken}`
+        );
+        return null;
+      }
+
+      // Update the device
+      const { data, error } = await supabaseAdmin!
+        .from("user_devices")
+        .update(updateData)
+        .eq("id", existingDevice.id)
+        .select()
+        .single();
+
+      if (error) {
+        logger.error("Error updating device:", error);
+        throw new AppError(error.message, 400);
+      }
+
+      return data as UserDevice;
+    } catch (error) {
+      logger.error("Error in updateUserDevice:", error);
+      throw error instanceof AppError
+        ? error
+        : new AppError("Failed to update device", 500);
     }
   }
 
