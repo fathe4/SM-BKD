@@ -8,6 +8,8 @@ import {
 } from "../types/models";
 import { AppError } from "../middlewares/errorHandler";
 import { logger } from "../utils/logger";
+import { StorageService } from "./storageService";
+import { FileUploadResult } from "../types/storage";
 
 /**
  * Service class for user-related database operations
@@ -37,6 +39,57 @@ export class UserService {
       throw error instanceof AppError
         ? error
         : new AppError("Failed to create user", 500);
+    }
+  }
+
+  /**
+   * Find a user by username with profile data in a single query
+   */
+  static async findUserByUsernameWithProfile(
+    username: string
+  ): Promise<any | null> {
+    try {
+      // Find the user and their profile in a single query
+      const { data, error } = await supabase
+        .from("users")
+        .select(
+          `
+            id, 
+            username, 
+            first_name, 
+            last_name, 
+            profile_picture, 
+            cover_picture, 
+            bio, 
+            location, 
+            is_verified,
+            profiles(*)
+          `
+        )
+        .eq("username", username)
+        .single();
+
+      if (error) {
+        if (error.code === "PGRST116") {
+          // No user found
+          return null;
+        }
+        logger.error("Error finding user by username:", error);
+        throw new AppError(error.message, 400);
+      }
+
+      // Transform the response to have a cleaner structure
+      const { profiles, ...userInfo } = data;
+
+      return {
+        user: userInfo,
+        profile: profiles && profiles.length > 0 ? profiles[0] : null,
+      };
+    } catch (error) {
+      logger.error("Error in findUserByUsernameWithProfile:", error);
+      throw error instanceof AppError
+        ? error
+        : new AppError("Failed to find user by username", 500);
     }
   }
 
@@ -459,6 +512,134 @@ export class UserService {
       throw error instanceof AppError
         ? error
         : new AppError("Failed to track location", 500);
+    }
+  }
+  // src/services/userService.ts (add these methods to your existing UserService class)
+
+  /**
+   * Update a user's profile picture
+   */
+  static async updateProfilePicture(
+    userId: string,
+    fileResult: FileUploadResult
+  ): Promise<User> {
+    try {
+      // Get the current user to check if they have an existing profile picture
+      const currentUser = await this.findUserById(userId);
+
+      if (!currentUser) {
+        throw new AppError("User not found", 404);
+      }
+
+      // Extract the file path from the existing profile picture URL if it exists
+      let oldPicturePath: string | null = null;
+      if (currentUser.profile_picture) {
+        // Example profile_picture URL: https://xxxx.supabase.co/storage/v1/object/public/profile-pictures/folder/filename.jpg
+        // We need to extract 'folder/filename.jpg' part
+        const urlParts = currentUser.profile_picture.split("/public/");
+        if (urlParts.length > 1) {
+          const bucketAndPath = urlParts[1].split("/");
+          if (bucketAndPath.length > 1) {
+            // Remove the bucket name from the path
+            bucketAndPath.shift();
+            oldPicturePath = bucketAndPath.join("/");
+          }
+        }
+      }
+
+      // Update user with new profile picture URL
+      const { data, error } = await supabaseAdmin!
+        .from("users")
+        .update({
+          profile_picture: fileResult.publicUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", userId)
+        .select()
+        .single();
+
+      if (error) {
+        logger.error("Error updating profile picture:", error);
+        throw new AppError(error.message, 400);
+      }
+
+      // If there was an old picture and the update was successful, we can delete the old one
+      if (oldPicturePath) {
+        try {
+          await StorageService.deleteFile("profile-pictures", oldPicturePath);
+        } catch (deleteError) {
+          // Log the error but don't fail the whole operation
+          logger.warn("Failed to delete old profile picture:", deleteError);
+        }
+      }
+
+      return data as User;
+    } catch (error) {
+      logger.error("Error in updateProfilePicture:", error);
+      throw error instanceof AppError
+        ? error
+        : new AppError("Failed to update profile picture", 500);
+    }
+  }
+
+  /**
+   * Remove a user's profile picture
+   */
+  static async removeProfilePicture(userId: string): Promise<User> {
+    try {
+      // Get the current user to check if they have an existing profile picture
+      const currentUser = await this.findUserById(userId);
+
+      if (!currentUser) {
+        throw new AppError("User not found", 404);
+      }
+
+      // Extract the file path from the existing profile picture URL if it exists
+      let picturePath: string | null = null;
+      if (currentUser.profile_picture) {
+        // Extract path similar to the method above
+        const urlParts = currentUser.profile_picture.split("/public/");
+        if (urlParts.length > 1) {
+          const bucketAndPath = urlParts[1].split("/");
+          if (bucketAndPath.length > 1) {
+            bucketAndPath.shift();
+            picturePath = bucketAndPath.join("/");
+          }
+        }
+      } else {
+        // No profile picture to remove
+        return currentUser;
+      }
+
+      // Update user to remove profile picture URL
+      const { data, error } = await supabaseAdmin!
+        .from("users")
+        .update({ profile_picture: null, updated_at: new Date().toISOString() })
+        .eq("id", userId)
+        .select()
+        .single();
+
+      if (error) {
+        logger.error("Error removing profile picture:", error);
+        throw new AppError(error.message, 400);
+      }
+
+      // Delete the file from storage
+      if (picturePath) {
+        try {
+          await StorageService.deleteFile("profile-pictures", picturePath);
+        } catch (deleteError) {
+          // Log the error but don't fail the whole operation
+          logger.warn("Failed to delete profile picture file:", deleteError);
+        }
+      }
+
+      return data as User;
+    } catch (error) {
+      logger.error("Error in removeProfilePicture:", error);
+      throw error instanceof AppError
+        ? error
+        : new AppError("Failed to remove profile picture", 500);
     }
   }
 }

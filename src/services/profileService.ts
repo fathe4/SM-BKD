@@ -13,7 +13,19 @@ export class ProfileService {
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("*")
+        .select(
+          `
+        *,
+        user:users(
+          id, 
+          first_name, 
+          last_name, 
+          username, 
+          profile_picture, 
+          is_verified
+        )
+      `
+        )
         .eq("user_id", userId)
         .single();
 
@@ -182,6 +194,7 @@ export class ProfileService {
           last_name, 
           username, 
           profile_picture, 
+          cover_picture, 
           is_verified
         )
       `,

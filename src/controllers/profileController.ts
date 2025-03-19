@@ -3,6 +3,7 @@ import { Request, Response } from "express";
 import { logger } from "../utils/logger";
 import { AppError } from "../middlewares/errorHandler";
 import { ProfileService } from "../services/profileService";
+import { UserService } from "../services/userService";
 
 export class ProfileController {
   /**
@@ -162,6 +163,45 @@ export class ProfileController {
         res.status(500).json({
           status: "error",
           message: "Failed to retrieve profiles",
+        });
+      }
+    }
+  }
+
+  /**
+   * Find a user by username
+   */
+  static async findByUsername(req: Request, res: Response) {
+    try {
+      const { username } = req.params;
+
+      if (!username) {
+        throw new AppError("Username is required", 400);
+      }
+
+      const userData = await UserService.findUserByUsernameWithProfile(
+        username
+      );
+
+      if (!userData) {
+        throw new AppError("User not found", 404);
+      }
+
+      res.status(200).json({
+        status: "success",
+        data: userData,
+      });
+    } catch (error) {
+      logger.error("Error in findByUsername controller:", error);
+      if (error instanceof AppError) {
+        res.status(error.statusCode).json({
+          status: error.status,
+          message: error.message,
+        });
+      } else {
+        res.status(500).json({
+          status: "error",
+          message: "Failed to find user by username",
         });
       }
     }

@@ -53,6 +53,13 @@ router.put(
 );
 
 /**
+ * @route GET /api/v1/users/username/:username
+ * @desc Find a user by username
+ * @access Public
+ */
+router.get("/username/:username", ProfileController.findByUsername);
+
+/**
  * @route PATCH /api/v1/profiles
  * @desc Update specific profile fields
  * @access Private - Own profile only
