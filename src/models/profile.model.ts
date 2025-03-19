@@ -23,7 +23,7 @@ export type RelationshipStatus =
 
 export interface Profile {
   id: UUID;
-  user_id: UUID;
+  user_id: string;
   location?: string;
   coordinates?: GeoCoordinates;
   interests?: UserInterests;

@@ -86,3 +86,16 @@ export interface UserLocation extends BaseModel {
   location_source: LocationSource;
   additional_metadata?: Record<string, any>;
 }
+
+// Add this to your profile.model.ts file
+export interface ProfileWithUserDetails extends Profile {
+  user: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    username: string;
+    profile_picture?: string;
+    is_verified: boolean;
+  };
+  age?: number; // Calculated field
+}

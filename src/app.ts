@@ -6,6 +6,7 @@ import { config } from "dotenv";
 import { errorHandler } from "./middlewares/errorHandler";
 import { logger, morganStream } from "./utils/logger";
 import authRoutes from "./routes/authRoutes";
+import profileRoutes from "./routes/profileRoutes";
 
 // Load environment variables
 config();
@@ -34,6 +35,8 @@ app.get("/health", (req: Request, res: Response) => {
 
 // API routes
 app.use(`${apiPrefix}/auth`, authRoutes);
+app.use(`${apiPrefix}/profiles`, profileRoutes);
+
 // Other routes will be added here as they are implemented
 // app.use(`${apiPrefix}/users`, userRoutes);
 // app.use(`${apiPrefix}/posts`, postRoutes);

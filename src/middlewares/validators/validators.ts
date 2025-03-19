@@ -1,6 +1,6 @@
+import { logger } from "../../utils/logger";
 import { Request, Response, NextFunction } from "express";
 import { check, validationResult } from "express-validator";
-import { logger } from "../utils/logger";
 
 /**
  * Validation middleware for user registration

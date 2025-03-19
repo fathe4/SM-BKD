@@ -8,6 +8,7 @@ import { AppError } from "../middlewares/errorHandler";
 import { LocationSource, UserRole } from "../types/models";
 import { config } from "dotenv";
 import { IpLocationService } from "../services/ipLocationService";
+import { ProfileService } from "../services/profileService";
 
 config();
 
@@ -21,6 +22,12 @@ const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || "30d";
  * Authentication controller
  */
 export class AuthController {
+  /**
+   * Register a new user
+   */
+  // src/controllers/authController.ts
+  // Modify the register method to include profile creation
+
   /**
    * Register a new user
    */
@@ -69,6 +76,13 @@ export class AuthController {
         },
       });
 
+      // Create a basic profile for the user
+      await ProfileService.upsertProfile({
+        user_id: newUser.id,
+        // Add any default profile data you want to include
+        // This can be minimal or include data from registration if available
+      });
+
       // Generate token
       const token = jwt.sign(
         { id: newUser.id },
@@ -86,9 +100,10 @@ export class AuthController {
           clientInfo.deviceType
         ).catch((err) => {
           // Silently log the error but don't disrupt login process
-          logger.error("Error tracking location during login:", err);
+          logger.error("Error tracking location during registration:", err);
         });
       }
+
       res.status(201).json({
         status: "success",
         token,

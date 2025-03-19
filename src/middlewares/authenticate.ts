@@ -68,6 +68,7 @@ export const authenticate = async (
         message: "Your account has been deactivated",
       });
     }
+    console.log(decoded.id, " decoded.id");
 
     // Attach user to request object
     req.user = {
