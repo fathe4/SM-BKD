@@ -5,6 +5,7 @@ import {
   Friendship,
   UserDevice,
   UserLocation,
+  UserRole,
 } from "../types/models";
 import { AppError } from "../middlewares/errorHandler";
 import { logger } from "../utils/logger";
@@ -640,6 +641,107 @@ export class UserService {
       throw error instanceof AppError
         ? error
         : new AppError("Failed to remove profile picture", 500);
+    }
+  }
+
+  /**
+   * Delete a user
+   */
+  static async deleteUser(id: string): Promise<void> {
+    try {
+      const { error } = await supabaseAdmin!
+        .from("users")
+        .delete()
+        .eq("id", id);
+
+      if (error) {
+        logger.error("Error deleting user:", error);
+        throw new AppError(error.message, 400);
+      }
+    } catch (error) {
+      logger.error("Error in deleteUser:", error);
+      throw error instanceof AppError
+        ? error
+        : new AppError("Failed to delete user", 500);
+    }
+  }
+
+  /**
+   * Get users with pagination, filtering and search
+   */
+  static async getUsers(options: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    role?: UserRole;
+    is_verified?: boolean;
+    is_active?: boolean;
+    sort_by?: string;
+    order?: "asc" | "desc";
+  }): Promise<{ users: User[]; total: number }> {
+    try {
+      const {
+        page = 1,
+        limit = 10,
+        search,
+        role,
+        is_verified,
+        is_active,
+        sort_by = "created_at",
+        order = "desc",
+      } = options;
+
+      // Calculate offset for pagination
+      const offset = (page - 1) * limit;
+
+      // Start building the query
+      let query = supabase.from("users").select("*", { count: "exact" });
+
+      // Apply search filter if provided
+      if (search) {
+        query = query.or(
+          `first_name.ilike.%${search}%,last_name.ilike.%${search}%,username.ilike.%${search}%,email.ilike.%${search}%`
+        );
+      }
+
+      // Apply role filter if provided
+      if (role) {
+        query = query.eq("role", role);
+      }
+
+      // Apply verification filter if provided
+      if (is_verified !== undefined) {
+        query = query.eq("is_verified", is_verified);
+      }
+
+      // Apply active status filter if provided
+      if (is_active !== undefined) {
+        query = query.eq("is_active", is_active);
+      }
+
+      // Apply sorting
+      query = query.order(sort_by, { ascending: order === "asc" });
+
+      // Apply pagination
+      query = query.range(offset, offset + limit - 1);
+
+      // Execute the query
+      const { data, error, count } = await query;
+
+      if (error) {
+        logger.error("Error fetching users:", error);
+        throw new AppError(error.message, 400);
+      }
+
+      return {
+        users: data as User[],
+        total: count || 0,
+      };
+    } catch (error) {
+      logger.error("Error in getUsers:", error);
+      throw error instanceof AppError
+        ? error
+        : new AppError("Failed to fetch users", 500);
     }
   }
 }

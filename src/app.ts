@@ -8,6 +8,8 @@ import { logger, morganStream } from "./utils/logger";
 import authRoutes from "./routes/authRoutes";
 import profileRoutes from "./routes/profileRoutes";
 import profilePictureRoutes from "./routes/profilePictureRoutes";
+import searchRoutes from "./routes/searchRoutes";
+import userRoutes from "./routes/userRoutes";
 
 // Load environment variables
 config();
@@ -19,7 +21,19 @@ const apiPrefix = process.env.API_PREFIX || "/api/v1";
 
 // Apply middlewares
 app.use(helmet()); // Security headers
-app.use(cors()); // Enable CORS for all routes
+const corsOptions = {
+  origin:
+    process.env.NODE_ENV === "production"
+      ? process.env.FRONTEND_URL
+      : ["http://localhost:3000", "http://127.0.0.1:3000"],
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+  maxAge: 86400, // 24 hours
+};
+
+// Apply middlewares
+app.use(cors(corsOptions)); // Enable CORS for all routes
 app.use(express.json()); // Parse JSON request bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded request bodies
 app.use(morgan("dev", { stream: morganStream })); // Request logging
@@ -38,6 +52,8 @@ app.get("/health", (req: Request, res: Response) => {
 app.use(`${apiPrefix}/auth`, authRoutes);
 app.use(`${apiPrefix}/profiles`, profileRoutes);
 app.use(`${apiPrefix}/profile-pictures`, profilePictureRoutes);
+app.use(`${apiPrefix}/search`, searchRoutes);
+app.use(`${apiPrefix}/users`, userRoutes);
 
 // Other routes will be added here as they are implemented
 // app.use(`${apiPrefix}/users`, userRoutes);

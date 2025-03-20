@@ -1,4 +1,8 @@
 import { UUID } from "crypto";
+import {
+  BasePrivacySettings,
+  DEFAULT_BASE_PRIVACY_SETTINGS,
+} from "./privacy-settings.model";
 
 export enum UserRole {
   ADMIN = "admin",
@@ -73,3 +77,24 @@ export interface UserPublicProfile {
   location?: string;
   is_verified: boolean;
 }
+export interface UserSettings {
+  notifications: {
+    email: boolean;
+    push: boolean;
+    inApp: boolean;
+  };
+  privacy: BasePrivacySettings;
+  theme: "light" | "dark" | "system";
+  language: string;
+}
+
+export const DEFAULT_USER_SETTINGS: UserSettings = {
+  notifications: {
+    email: true,
+    push: true,
+    inApp: true,
+  },
+  privacy: DEFAULT_BASE_PRIVACY_SETTINGS,
+  theme: "light",
+  language: "en",
+};
