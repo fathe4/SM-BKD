@@ -10,6 +10,7 @@ import profileRoutes from "./routes/profileRoutes";
 import profilePictureRoutes from "./routes/profilePictureRoutes";
 import searchRoutes from "./routes/searchRoutes";
 import userRoutes from "./routes/userRoutes";
+import postRoutes from "./routes/postRoutes";
 
 // Load environment variables
 config();
@@ -54,6 +55,7 @@ app.use(`${apiPrefix}/profiles`, profileRoutes);
 app.use(`${apiPrefix}/profile-pictures`, profilePictureRoutes);
 app.use(`${apiPrefix}/search`, searchRoutes);
 app.use(`${apiPrefix}/users`, userRoutes);
+app.use(`${apiPrefix}/posts`, postRoutes);
 
 // Other routes will be added here as they are implemented
 // app.use(`${apiPrefix}/users`, userRoutes);
