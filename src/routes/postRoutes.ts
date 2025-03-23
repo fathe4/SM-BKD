@@ -9,6 +9,8 @@ import {
 } from "../middlewares/validators/postValidator";
 import { UserRole } from "../types/models";
 import { canAccessProfile } from "../middlewares/canAccess";
+import { ReactionController } from "../controllers/reactionController";
+import { validateReaction } from "../middlewares/validators/reactionValidator";
 
 const router = Router();
 
@@ -37,7 +39,7 @@ router.get("/user/:userId", PostController.getUserPosts);
 router.post("/", validateCreatePost, PostController.createPost);
 
 /**
- * @route GET /api/v1/posts/admin/all
+ * @route GET /api/v1/posts/all
  * @desc Get all posts with filtering (admin only)
  * @access Admin only
  */
@@ -62,7 +64,7 @@ router.get("/:id", PostController.getPost);
  */
 router.put(
   "/:id",
-  canAccessPost(true, []), // Only post owner can update
+  canAccessPost(true, [UserRole.ADMIN]), // Only post owner can update
   validateUpdatePost,
   PostController.updatePost
 );
@@ -76,6 +78,33 @@ router.delete(
   "/:id",
   canAccessPost(true, [UserRole.ADMIN, UserRole.MODERATOR]), // Post owner, admin, or moderator can delete
   PostController.deletePost
+);
+
+/**
+ * Reaction routes
+ */
+router.post(
+  "/:postId/reactions",
+  validateReaction,
+  ReactionController.addReaction
+);
+
+router.get("/:postId/reactions", ReactionController.getReactions);
+
+router.get("/:postId/reactions/summary", ReactionController.getReactionSummary);
+
+router.get("/:postId/reactions/status", ReactionController.getReactionStatus);
+
+router.patch(
+  "/:postId/reactions",
+  validateReaction,
+  ReactionController.updateReaction
+);
+
+router.delete(
+  "/:postId/reactions",
+  canAccessPost(true),
+  ReactionController.deleteReaction
 );
 
 export default router;

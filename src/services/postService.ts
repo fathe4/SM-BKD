@@ -299,10 +299,6 @@ export class PostService {
         throw new AppError("Post not found", 404);
       }
 
-      if (post.user_id !== userId) {
-        throw new AppError("You are not authorized to update this post", 403);
-      }
-
       // Update post
       const { data, error } = await supabaseAdmin!
         .from("posts")

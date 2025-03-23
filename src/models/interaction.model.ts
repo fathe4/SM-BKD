@@ -47,3 +47,19 @@ export interface CommentUpdate
       "id" | "user_id" | "post_id" | "parent_id" | "created_at" | "updated_at"
     >
   > {}
+
+export interface Reaction {
+  id: UUID;
+  user_id: UUID;
+  target_id: UUID;
+  target_type: TargetType;
+  reaction_type: ReactionType;
+  created_at: Date;
+}
+
+export interface ReactionCreate {
+  user_id: UUID;
+  target_id: UUID;
+  target_type: TargetType;
+  reaction_type: ReactionType;
+}
