@@ -9,6 +9,8 @@ import {
 } from "../middlewares/validators/userValidator";
 import { UserRole } from "../types/models";
 import { canAccessProfile } from "../middlewares/canAccess";
+import { FriendshipController } from "../controllers/friendshipController";
+import { validateUserId } from "../middlewares/validators/friendshipValidator";
 
 const router = Router();
 
@@ -73,6 +75,14 @@ router.delete(
   authenticate,
   canAccessProfile(false, [UserRole.ADMIN]), // Only admins can access
   UserController.deleteUser
+);
+
+router.use(
+  "/:userId/friendships",
+  validateUserId,
+  authenticate,
+  canAccessProfile(false, [UserRole.ADMIN, UserRole.MODERATOR]),
+  FriendshipController.getUserFriendships
 );
 
 /**

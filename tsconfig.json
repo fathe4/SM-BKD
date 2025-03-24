@@ -16,7 +16,7 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src/**/*", "tests/**/*", "tests", "jest.config.js"],
+  "include": ["src/**/*", "jest.config.js"],
   "typeRoots": ["./node_modules/@types", "./src/types"],
   "exclude": ["node_modules", "dist"]
 }

@@ -20,7 +20,7 @@ export interface Story {
 }
 
 export interface StoryCreate
-  extends Omit<Story, "id" | "created_at" | "view_count"> {
+  extends Omit<Story, "id" | "created_at" | "view_count" | "expires_at"> {
   // Default expires_at to 24 hours if not provided
   expires_at?: Date;
 }

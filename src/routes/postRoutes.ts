@@ -11,6 +11,7 @@ import { UserRole } from "../types/models";
 import { canAccessProfile } from "../middlewares/canAccess";
 import { ReactionController } from "../controllers/reactionController";
 import { validateReaction } from "../middlewares/validators/reactionValidator";
+import { uploadPostMedia } from "../middlewares/postMediaUpload"; // Add this import
 
 const router = Router();
 
@@ -36,7 +37,12 @@ router.get("/user/:userId", PostController.getUserPosts);
  * @desc Create a new post
  * @access Private
  */
-router.post("/", validateCreatePost, PostController.createPost);
+router.post(
+  "/",
+  uploadPostMedia, // Add this middleware before validation
+  validateCreatePost,
+  PostController.createPost
+);
 
 /**
  * @route GET /api/v1/posts/all
@@ -46,7 +52,7 @@ router.post("/", validateCreatePost, PostController.createPost);
 router.get(
   "/all",
   authenticate,
-  canAccessProfile(false, [UserRole.ADMIN, UserRole.MODERATOR]), // Only admins can access, not for regular users
+  canAccessProfile(false, [UserRole.ADMIN, UserRole.MODERATOR]),
   PostController.getAllPosts
 );
 
@@ -64,7 +70,8 @@ router.get("/:id", PostController.getPost);
  */
 router.put(
   "/:id",
-  canAccessPost(true, [UserRole.ADMIN]), // Only post owner can update
+  canAccessPost(true, [UserRole.ADMIN]),
+  uploadPostMedia, // Add media upload for post updates too
   validateUpdatePost,
   PostController.updatePost
 );
@@ -76,7 +83,7 @@ router.put(
  */
 router.delete(
   "/:id",
-  canAccessPost(true, [UserRole.ADMIN, UserRole.MODERATOR]), // Post owner, admin, or moderator can delete
+  canAccessPost(true, [UserRole.ADMIN, UserRole.MODERATOR]),
   PostController.deletePost
 );
 
@@ -101,10 +108,6 @@ router.patch(
   ReactionController.updateReaction
 );
 
-router.delete(
-  "/:postId/reactions",
-  canAccessPost(true),
-  ReactionController.deleteReaction
-);
+router.delete("/:postId/reactions", ReactionController.deleteReaction);
 
 export default router;

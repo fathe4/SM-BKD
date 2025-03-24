@@ -1,7 +1,6 @@
 // src/services/reactionService.ts
 import { supabase, supabaseAdmin } from "../config/supabase";
 import { AppError } from "../middlewares/errorHandler";
-import { logger } from "../utils/logger";
 import { asyncHandler } from "../utils/asyncHandler";
 import {
   Reaction,

@@ -11,6 +11,9 @@ import profilePictureRoutes from "./routes/profilePictureRoutes";
 import searchRoutes from "./routes/searchRoutes";
 import userRoutes from "./routes/userRoutes";
 import postRoutes from "./routes/postRoutes";
+import commentRoutes from "./routes/commentRoutes";
+import standaloneCommentRoutes from "./routes/standaloneCommentRoutes";
+import friendshipRoutes from "./routes/friendshipRoutes";
 
 // Load environment variables
 config();
@@ -56,6 +59,9 @@ app.use(`${apiPrefix}/profile-pictures`, profilePictureRoutes);
 app.use(`${apiPrefix}/search`, searchRoutes);
 app.use(`${apiPrefix}/users`, userRoutes);
 app.use(`${apiPrefix}/posts`, postRoutes);
+app.use(`${apiPrefix}/posts`, commentRoutes);
+app.use(`${apiPrefix}/comments`, standaloneCommentRoutes);
+app.use(`${apiPrefix}/friendships`, friendshipRoutes);
 
 // Other routes will be added here as they are implemented
 // app.use(`${apiPrefix}/users`, userRoutes);

@@ -20,11 +20,11 @@ const allowedImageTypes = [
   "image/png",
   "image/webp",
 ];
-const allowedVideoTypes = [
-  ...allowedImageTypes,
-  "video/mp4",
-  "video/quicktime",
-];
+// const allowedVideoTypes = [
+//   ...allowedImageTypes,
+//   "video/mp4",
+//   "video/quicktime",
+// ];
 
 // File filter function
 const imageFileFilter = (

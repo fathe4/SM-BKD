@@ -11,6 +11,8 @@ import {
 import { AppError } from "../middlewares/errorHandler";
 import { FriendshipStatus } from "../models/friendship.model";
 import { asyncHandler } from "../utils/asyncHandler";
+import { StorageService } from "./storageService";
+import { logger } from "../utils/logger";
 
 /**
  * Service class for post-related operations
@@ -490,5 +492,55 @@ export class PostService {
       };
     },
     "Failed to get all posts"
+  );
+
+  /**
+   * Delete all media for a post
+   */
+  static deletePostMedia = asyncHandler(
+    async (postId: string): Promise<void> => {
+      // First get the current media items to delete them from storage later
+      const { data: mediaItems, error: fetchError } = await supabase
+        .from("post_media")
+        .select("media_url")
+        .eq("post_id", postId);
+
+      if (fetchError) {
+        throw new AppError(fetchError.message, 400);
+      }
+
+      // Delete the media records from the database
+      const { error: deleteError } = await supabaseAdmin!
+        .from("post_media")
+        .delete()
+        .eq("post_id", postId);
+
+      if (deleteError) {
+        throw new AppError(deleteError.message, 400);
+      }
+
+      // Attempt to delete the files from storage
+      // This is best-effort - we don't want to fail if the file is already gone
+      for (const item of mediaItems) {
+        try {
+          // Extract the file path from the URL
+          const urlParts = item.media_url.split("/public/");
+          if (urlParts.length > 1) {
+            const bucketAndPath = urlParts[1].split("/");
+            if (bucketAndPath.length > 1) {
+              bucketAndPath.shift(); // Remove bucket name
+              const filePath = bucketAndPath.join("/");
+
+              // Delete the file from storage
+              await StorageService.deleteFile("post-media", filePath);
+            }
+          }
+        } catch (error) {
+          // Log but don't throw - we want to continue even if one file fails
+          logger.warn(`Failed to delete media file: ${item.media_url}`, error);
+        }
+      }
+    },
+    "Failed to delete post media"
   );
 }

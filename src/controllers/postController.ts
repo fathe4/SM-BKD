@@ -4,7 +4,9 @@ import { Request, Response } from "express";
 import { PostService } from "../services/postService";
 import { controllerHandler } from "../utils/controllerHandler";
 import { AppError } from "../middlewares/errorHandler";
-import { PostVisibility } from "@/models";
+import { MediaType, PostVisibility } from "../models";
+import { StorageService } from "../services/storageService";
+import { logger } from "../utils/logger";
 
 export class PostController {
   /**
@@ -15,19 +17,68 @@ export class PostController {
     const userId = req.user!.id;
     const postData = { ...req.body, user_id: userId };
 
-    // Process post creation
-    const post = await PostService.createPost(postData);
+    // Process uploaded files if any
+    let mediaItems = [];
+    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+      // Process and upload each file
+      const uploadPromises = (req.files as Express.Multer.File[]).map(
+        async (file, index) => {
+          try {
+            // Determine media type based on mimetype
+            let mediaType: MediaType;
+            if (file.mimetype.startsWith("image/")) {
+              mediaType = MediaType.IMAGE;
+            } else if (file.mimetype.startsWith("video/")) {
+              mediaType = MediaType.VIDEO;
+            } else {
+              mediaType = MediaType.DOCUMENT;
+            }
 
-    // Process media if included
-    if (req.body.media && Array.isArray(req.body.media)) {
-      const mediaItems = req.body.media.map((media: any, index: number) => ({
-        post_id: post.id,
+            // Upload file to storage
+            const uploadResult = await StorageService.uploadFile(
+              "post-media",
+              file,
+              userId // Use user ID as folder name
+            );
+
+            // Return media item info
+            return {
+              media_url: uploadResult.publicUrl,
+              media_type: mediaType,
+              order: index,
+            };
+          } catch (error: any) {
+            logger.error("Error uploading media file:", error);
+            throw new AppError(
+              `Failed to upload media file: ${error.message || error}`,
+              500
+            );
+          }
+        }
+      );
+
+      // Wait for all uploads to complete
+      mediaItems = await Promise.all(uploadPromises);
+    } else if (req.body.media && Array.isArray(req.body.media)) {
+      // Handle legacy approach - Use media info from request body
+      mediaItems = req.body.media.map((media: any, index: number) => ({
         media_url: media.url,
         media_type: media.type,
         order: index,
       }));
+    }
 
-      await PostService.addPostMedia(mediaItems);
+    // Process post creation
+    const post = await PostService.createPost(postData);
+
+    // Add media items to post if there are any
+    if (mediaItems.length > 0) {
+      const postMediaItems = mediaItems.map((item: any) => ({
+        post_id: post.id,
+        ...item,
+      }));
+
+      await PostService.addPostMedia(postMediaItems);
     }
 
     // Get the complete post with media
@@ -41,6 +92,62 @@ export class PostController {
     });
   });
 
+  /**
+   * Update a post
+   * @route PUT /api/v1/posts/:id
+   */
+  static updatePost = controllerHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const postId = res.locals.postId;
+
+    // Handle file uploads if any
+    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+      // Process and upload each file
+      const mediaItems = await Promise.all(
+        (req.files as Express.Multer.File[]).map(async (file, index) => {
+          // Determine media type
+          let mediaType: MediaType;
+          if (file.mimetype.startsWith("image/")) {
+            mediaType = MediaType.IMAGE;
+          } else if (file.mimetype.startsWith("video/")) {
+            mediaType = MediaType.VIDEO;
+          } else {
+            mediaType = MediaType.DOCUMENT;
+          }
+
+          // Upload file
+          const uploadResult = await StorageService.uploadFile(
+            "post-media",
+            file,
+            userId
+          );
+
+          return {
+            post_id: postId,
+            media_url: uploadResult.publicUrl,
+            media_type: mediaType,
+            order: index,
+          };
+        })
+      );
+
+      // If we're replacing media, first delete existing media
+      await PostService.deletePostMedia(postId);
+
+      // Then add the new media
+      await PostService.addPostMedia(mediaItems);
+    }
+
+    // Update the post data
+    const updatedPost = await PostService.updatePost(postId, userId, req.body);
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        post: updatedPost,
+      },
+    });
+  });
   /**
    * Get a post by ID
    * @route GET /api/v1/posts/:id
@@ -117,24 +224,6 @@ export class PostController {
         page,
         totalPages: Math.ceil(total / limit),
         limit,
-      },
-    });
-  });
-
-  /**
-   * Update a post
-   * @route PUT /api/v1/posts/:id
-   */
-  static updatePost = controllerHandler(async (req: Request, res: Response) => {
-    const userId = req.user!.id;
-    const postId = res.locals.postId;
-
-    const updatedPost = await PostService.updatePost(postId, userId, req.body);
-
-    res.status(200).json({
-      status: "success",
-      data: {
-        post: updatedPost,
       },
     });
   });

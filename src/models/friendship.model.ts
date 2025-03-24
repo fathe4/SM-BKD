@@ -1,5 +1,3 @@
-import { UUID } from "crypto";
-
 export enum FriendshipStatus {
   PENDING = "pending",
   ACCEPTED = "accepted",
@@ -8,9 +6,9 @@ export enum FriendshipStatus {
 }
 
 export interface Friendship {
-  id: UUID;
-  requester_id: UUID;
-  addressee_id: UUID;
+  id: string;
+  requester_id: string;
+  addressee_id: string;
   status: FriendshipStatus;
   created_at: Date;
   updated_at: Date;
@@ -27,11 +25,12 @@ export interface FriendshipUpdate
   > {}
 
 export interface FriendSummary {
-  id: UUID;
+  id: string;
   username: string;
   first_name: string;
   last_name: string;
   profile_picture?: string;
-  friendship_id: UUID;
-  friendship_status: FriendshipStatus;
+  friendship_id?: string;
+  friendship_status?: FriendshipStatus;
+  is_requester?: boolean;
 }
