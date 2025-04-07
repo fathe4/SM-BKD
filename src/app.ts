@@ -11,10 +11,15 @@ import profilePictureRoutes from "./routes/profilePictureRoutes";
 import searchRoutes from "./routes/searchRoutes";
 import userRoutes from "./routes/userRoutes";
 import postRoutes from "./routes/postRoutes";
+import chatRoutes from "./routes/chatRoutes";
 import commentRoutes from "./routes/commentRoutes";
 import standaloneCommentRoutes from "./routes/standaloneCommentRoutes";
 import friendshipRoutes from "./routes/friendshipRoutes";
 import debugRoutes from "./debug/vercelAuth";
+import http from "http";
+import { initializeSocketIO } from "./config/socketio";
+import { ChatService } from "./services/message/chatService";
+import messagingRoutes from "./routes/messagingRoutes";
 
 // Load environment variables
 config();
@@ -22,7 +27,19 @@ config();
 // Create Express application
 const app: Application = express();
 const port = process.env.PORT || 5000;
+const chatPort = process.env.CHAT_PORT || 7070;
 const apiPrefix = process.env.API_PREFIX || "/api/v1";
+
+// Create HTTP server with Express app
+const server = http.createServer(app);
+
+// Initialize Socket.IO with HTTP server
+initializeSocketIO(server);
+
+// Initialize scheduled message deletions
+ChatService.initializeScheduledDeletions().catch((err) => {
+  logger.error("Failed to initialize scheduled message deletions:", err);
+});
 
 // Apply middlewares
 app.use(
@@ -51,6 +68,7 @@ app.use(express.json()); // Parse JSON request bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded request bodies
 app.use(morgan("dev", { stream: morganStream })); // Request logging
 app.use("/debug", debugRoutes);
+app.use(`${apiPrefix}/chats`, chatRoutes);
 
 // Health check route
 app.get("/health", (req: Request, res: Response) => {
@@ -72,6 +90,7 @@ app.use(`${apiPrefix}/posts`, postRoutes);
 app.use(`${apiPrefix}/posts`, commentRoutes);
 app.use(`${apiPrefix}/comments`, standaloneCommentRoutes);
 app.use(`${apiPrefix}/friendships`, friendshipRoutes);
+app.use(`${apiPrefix}/messages`, messagingRoutes);
 
 // Other routes will be added here as they are implemented
 // app.use(`${apiPrefix}/users`, userRoutes);
@@ -98,6 +117,16 @@ app.listen(port, () => {
     } mode`
   );
   logger.info(`API accessible at http://localhost:${port}${apiPrefix}`);
+});
+
+server.listen(chatPort, () => {
+  logger.info(
+    `Server running on port ${chatPort} in ${
+      process.env.NODE_ENV || "development"
+    } mode`
+  );
+  logger.info(`API accessible at http://localhost:${chatPort}${apiPrefix}`);
+  logger.info("Socket.IO server started");
 });
 // }
 

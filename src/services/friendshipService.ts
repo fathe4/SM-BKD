@@ -9,6 +9,8 @@ import {
 import { getUserBasicProfile } from "../utils/profileUtils";
 // Using string instead of UUID type from crypto to avoid template literal type issues
 import { asyncHandler } from "../utils/asyncHandler";
+import { ChatService } from "./message/chatService";
+import { logger } from "../utils/logger";
 
 export class FriendshipService {
   /**
@@ -113,6 +115,18 @@ export class FriendshipService {
       friendshipId: string,
       status: FriendshipStatus
     ): Promise<Friendship> => {
+      // First get the friendship to know the participants
+      const { data: existingFriendship, error: fetchError } = await supabase
+        .from("friendships")
+        .select("*")
+        .eq("id", friendshipId)
+        .single();
+
+      if (fetchError) {
+        throw new AppError(fetchError.message, 400);
+      }
+
+      // Update the friendship status
       const { data, error } = await supabaseAdmin!
         .from("friendships")
         .update({
@@ -125,6 +139,33 @@ export class FriendshipService {
 
       if (error) {
         throw new AppError(error.message, 400);
+      }
+
+      // If the status is now "accepted", create a chat for the users
+      if (status === FriendshipStatus.ACCEPTED) {
+        try {
+          // Check if a chat already exists between these users
+          const existingChat = await ChatService.findDirectChat(
+            existingFriendship.requester_id,
+            existingFriendship.addressee_id
+          );
+
+          // If no chat exists, create one
+          if (!existingChat) {
+            await ChatService.createChat(
+              existingFriendship.requester_id,
+              [existingFriendship.addressee_id],
+              false // Not a group chat
+            );
+            logger.info(`Created chat for new friendship: ${friendshipId}`);
+          }
+        } catch (chatError) {
+          // Log error but don't fail the friendship update
+          logger.error(
+            `Failed to create chat for friendship ${friendshipId}:`,
+            chatError
+          );
+        }
       }
 
       return data as Friendship;
