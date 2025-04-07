@@ -14,6 +14,7 @@ import postRoutes from "./routes/postRoutes";
 import commentRoutes from "./routes/commentRoutes";
 import standaloneCommentRoutes from "./routes/standaloneCommentRoutes";
 import friendshipRoutes from "./routes/friendshipRoutes";
+import debugRoutes from "./debug/vercelAuth";
 
 // Load environment variables
 config();
@@ -24,14 +25,22 @@ const port = process.env.PORT || 5000;
 const apiPrefix = process.env.API_PREFIX || "/api/v1";
 
 // Apply middlewares
-app.use(helmet()); // Security headers
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    contentSecurityPolicy: false,
+  })
+);
 const corsOptions = {
-  origin:
-    process.env.NODE_ENV === "production"
-      ? process.env.FRONTEND_URL
-      : ["http://localhost:3000", "http://127.0.0.1:3000"],
-  methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  origin: "*", // Allow all origins for testing
+  // Alternatively, use this more secure approach when ready:
+  // origin: [
+  //   "http://localhost:3000",
+  //   "http://127.0.0.1:3000",
+  //   "https://yourdomain.com" // Add your frontend domain
+  // ],
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
   credentials: true,
   maxAge: 86400, // 24 hours
 };
@@ -41,6 +50,7 @@ app.use(cors(corsOptions)); // Enable CORS for all routes
 app.use(express.json()); // Parse JSON request bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded request bodies
 app.use(morgan("dev", { stream: morganStream })); // Request logging
+app.use("/debug", debugRoutes);
 
 // Health check route
 app.get("/health", (req: Request, res: Response) => {
@@ -80,15 +90,15 @@ app.use((req: Request, res: Response) => {
 app.use(errorHandler);
 
 // Start server if not in test mode
-if (process.env.NODE_ENV !== "test") {
-  app.listen(port, () => {
-    logger.info(
-      `Server running on port ${port} in ${
-        process.env.NODE_ENV || "development"
-      } mode`
-    );
-    logger.info(`API accessible at http://localhost:${port}${apiPrefix}`);
-  });
-}
+// if (process.env.NODE_ENV !== "development") {
+app.listen(port, () => {
+  logger.info(
+    `Server running on port ${port} in ${
+      process.env.NODE_ENV || "development"
+    } mode`
+  );
+  logger.info(`API accessible at http://localhost:${port}${apiPrefix}`);
+});
+// }
 
 export default app;

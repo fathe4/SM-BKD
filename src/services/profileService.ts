@@ -15,16 +15,17 @@ export class ProfileService {
         .from("profiles")
         .select(
           `
-        *,
-        user:users(
-          id, 
-          first_name, 
-          last_name, 
-          username, 
-          profile_picture, 
-          is_verified
-        )
-      `
+          *,
+          user:users(
+            id, 
+            first_name, 
+            last_name, 
+            username, 
+            profile_picture,
+            cover_picture, 
+            is_verified
+          )
+        `
         )
         .eq("user_id", userId)
         .single();
@@ -43,7 +44,6 @@ export class ProfileService {
         : new AppError("Failed to fetch profile", 500);
     }
   }
-
   /**
    * Create or update a user profile
    */

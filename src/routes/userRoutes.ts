@@ -81,7 +81,7 @@ router.use(
   "/:userId/friendships",
   validateUserId,
   authenticate,
-  canAccessProfile(false, [UserRole.ADMIN, UserRole.MODERATOR]),
+  canAccessProfile(false, [UserRole.ADMIN, UserRole.MODERATOR ]),
   FriendshipController.getUserFriendships
 );
 

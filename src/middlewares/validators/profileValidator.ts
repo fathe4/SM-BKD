@@ -1,5 +1,5 @@
 // src/middlewares/validators/profileValidator.ts
-import { check } from "express-validator";
+import { body, check } from "express-validator";
 import { validateRequest } from "./validateRequest";
 
 /**
@@ -99,6 +99,15 @@ export const profileValidationRules = [
       "not_specified",
     ])
     .withMessage("Invalid relationship status"),
+];
+
+export const validatePictureUrl = [
+  body("pictureUrl")
+    .notEmpty()
+    .withMessage("Picture URL is required")
+    .isURL()
+    .withMessage("Invalid URL format"),
+  validateRequest,
 ];
 
 /**

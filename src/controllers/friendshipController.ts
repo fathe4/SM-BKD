@@ -39,12 +39,13 @@ export class FriendshipController {
   static getFriendships = controllerHandler(
     async (req: Request, res: Response) => {
       const userId = req.user!.id;
+      const paramUserId = req.query.userId as string;
       const status = req.query.status as FriendshipStatus | undefined;
       const page = req.query.page ? parseInt(req.query.page as string) : 1;
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
 
       const { friendships, total } = await FriendshipService.getUserFriendships(
-        userId,
+        paramUserId ?? userId,
         { status, page, limit }
       );
 
@@ -121,6 +122,24 @@ export class FriendshipController {
       if (!friendship) {
         throw new AppError("Friendship not found", 404);
       }
+
+      console.log(friendship, "friendship.addressee_id");
+      console.log(userId, "riendship.addressee_id");
+      console.log(friendshipId, "friendshipId");
+
+      //   FIX THE FRIEND SYSTEM IN UI
+      //   FIX THE FRIEND SYSTEM IN UI
+      //   FIX THE FRIEND SYSTEM IN UI
+      //   FIX THE FRIEND SYSTEM IN UI
+      //   FIX THE FRIEND SYSTEM IN UI
+      //   FIX THE FRIEND SYSTEM IN UI
+      //   FIX THE FRIEND SYSTEM IN UI
+      //   FIX THE FRIEND SYSTEM IN UI
+      //   FIX THE FRIEND SYSTEM IN UI
+      //   FIX THE FRIEND SYSTEM IN UI
+      //   FIX THE FRIEND SYSTEM IN UI
+      //   FIX THE FRIEND SYSTEM IN UI
+      //   FIX THE FRIEND SYSTEM IN UI
 
       // Check permissions based on the action being taken
       if (

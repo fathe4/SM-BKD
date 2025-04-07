@@ -136,7 +136,10 @@ export class PostService {
       // Build query based on visibility permissions
       let query = supabase
         .from("posts")
-        .select("*, post_media(*)", { count: "exact" })
+        .select(
+          "*, post_media(*), users!inner(id, username, first_name, last_name, profile_picture)",
+          { count: "exact" }
+        )
         .eq("user_id", userId)
         .eq("is_deleted", false);
 
@@ -216,9 +219,12 @@ export class PostService {
       // Build feed query
       let query = supabase
         .from("posts")
-        .select("*, post_media(*), users!inner(username, profile_picture)", {
-          count: "exact",
-        })
+        .select(
+          "*, post_media(*), users!inner(username, first_name, last_name, profile_picture)",
+          {
+            count: "exact",
+          }
+        )
         .eq("is_deleted", false)
         .eq("visibility", PostVisibility.PUBLIC); // Default to only public posts
 
@@ -258,9 +264,12 @@ export class PostService {
           count: popularCount,
         } = await supabase
           .from("posts")
-          .select("*, post_media(*), users!inner(username, profile_picture)", {
-            count: "exact",
-          })
+          .select(
+            "*, post_media(*), users!inner(username, first_name, last_name, profile_picture)",
+            {
+              count: "exact",
+            }
+          )
           .eq("is_deleted", false)
           .eq("visibility", PostVisibility.PUBLIC)
           .neq("user_id", userId) // Not the current user's posts
@@ -441,9 +450,12 @@ export class PostService {
       // Start building query
       let query = supabase
         .from("posts")
-        .select("*, post_media(*), users!inner(username, profile_picture)", {
-          count: "exact",
-        });
+        .select(
+          "*, post_media(*), users!inner(username, first_name, last_name, profile_picture)",
+          {
+            count: "exact",
+          }
+        );
 
       // Apply filters
       if (userId) {
@@ -542,5 +554,44 @@ export class PostService {
       }
     },
     "Failed to delete post media"
+  );
+
+  /**
+   * Get posts for the authenticated user with pagination
+   */
+  static getMyPosts = asyncHandler(
+    async (
+      userId: string,
+      page = 1,
+      limit = 10
+    ): Promise<{ posts: Post[]; total: number }> => {
+      // We can leverage the existing getUserPosts method since the logic is the same
+      // The only difference is we're using the authenticated user's ID
+      // and we don't need visibility checks since users can always see their own posts
+      const offset = (page - 1) * limit;
+
+      const { data, error, count } = await supabase
+        .from("posts")
+        .select(
+          "*, post_media(*), users!inner(username, first_name, last_name, profile_picture)",
+          {
+            count: "exact",
+          }
+        )
+        .eq("user_id", userId)
+        .eq("is_deleted", false)
+        .order("created_at", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (error) {
+        throw new AppError(error.message, 400);
+      }
+
+      return {
+        posts: data as unknown as Post[],
+        total: count || 0,
+      };
+    },
+    "Failed to get my posts"
   );
 }

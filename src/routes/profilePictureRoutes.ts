@@ -2,24 +2,15 @@
 import { Router } from "express";
 import { authenticate } from "../middlewares/authenticate";
 import { ProfilePictureController } from "../controllers/profilePictureController";
-import {
-  uploadProfilePicture,
-  uploadCoverPicture,
-} from "../middlewares/fileUpload";
 
 const router = Router();
 
 /**
- * @route POST /api/v1/profile-pictures
- * @desc Upload a profile picture
+ * @route PUT /api/v1/profile-pictures
+ * @desc Update profile picture with URL
  * @access Private
  */
-router.post(
-  "/",
-  authenticate,
-  uploadProfilePicture,
-  ProfilePictureController.uploadProfilePicture
-);
+router.put("/", authenticate, ProfilePictureController.updateProfilePictureUrl);
 
 /**
  * @route DELETE /api/v1/profile-pictures
@@ -29,15 +20,14 @@ router.post(
 router.delete("/", authenticate, ProfilePictureController.removeProfilePicture);
 
 /**
- * @route POST /api/v1/profile-pictures/cover
- * @desc Upload a cover picture
+ * @route PUT /api/v1/profile-pictures/cover
+ * @desc Update cover picture with URL
  * @access Private
  */
-router.post(
+router.put(
   "/cover",
   authenticate,
-  uploadCoverPicture,
-  ProfilePictureController.uploadCoverPicture
+  ProfilePictureController.updateCoverPictureUrl
 );
 
 /**

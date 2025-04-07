@@ -32,12 +32,7 @@ router.get(
  * @desc Get a specific user's profile
  * @access Public for self and admin/moderator for others
  */
-router.get(
-  "/:userId",
-  authenticate,
-  canAccessProfile(true, [UserRole.ADMIN, UserRole.MODERATOR]), // Allow own profile or admin/moderator
-  ProfileController.getProfile
-);
+router.get("/:userId", authenticate, ProfileController.getProfile);
 
 /**
  * @route PUT /api/v1/profiles

@@ -744,4 +744,164 @@ export class UserService {
         : new AppError("Failed to fetch users", 500);
     }
   }
+
+  // Add these methods to your UserService class in src/services/userService.ts
+
+  /**
+   * Update a user's profile picture URL
+   */
+  static async updateProfilePictureUrl(
+    userId: string,
+    pictureUrl: string
+  ): Promise<User> {
+    try {
+      // Get the current user to check if they exist
+      const currentUser = await this.findUserById(userId);
+
+      if (!currentUser) {
+        throw new AppError("User not found", 404);
+      }
+
+      // Update user with new profile picture URL
+      const { data, error } = await supabaseAdmin!
+        .from("users")
+        .update({
+          profile_picture: pictureUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", userId)
+        .select()
+        .single();
+
+      if (error) {
+        logger.error("Error updating profile picture URL:", error);
+        throw new AppError(error.message, 400);
+      }
+
+      return data as User;
+    } catch (error) {
+      logger.error("Error in updateProfilePictureUrl:", error);
+      throw error instanceof AppError
+        ? error
+        : new AppError("Failed to update profile picture URL", 500);
+    }
+  }
+
+  /**
+   * Remove a user's profile picture URL
+   */
+  static async removeProfilePictureUrl(userId: string): Promise<User> {
+    try {
+      // Get the current user to check if they exist
+      const currentUser = await this.findUserById(userId);
+
+      if (!currentUser) {
+        throw new AppError("User not found", 404);
+      }
+
+      // If there's no profile picture, nothing to remove
+      if (!currentUser.profile_picture) {
+        return currentUser;
+      }
+
+      // Update user to remove profile picture URL
+      const { data, error } = await supabaseAdmin!
+        .from("users")
+        .update({ profile_picture: null, updated_at: new Date().toISOString() })
+        .eq("id", userId)
+        .select()
+        .single();
+
+      if (error) {
+        logger.error("Error removing profile picture URL:", error);
+        throw new AppError(error.message, 400);
+      }
+
+      return data as User;
+    } catch (error) {
+      logger.error("Error in removeProfilePictureUrl:", error);
+      throw error instanceof AppError
+        ? error
+        : new AppError("Failed to remove profile picture URL", 500);
+    }
+  }
+
+  /**
+   * Update a user's cover picture URL
+   */
+  static async updateCoverPictureUrl(
+    userId: string,
+    pictureUrl: string
+  ): Promise<User> {
+    try {
+      // Get the current user to check if they exist
+      const currentUser = await this.findUserById(userId);
+
+      if (!currentUser) {
+        throw new AppError("User not found", 404);
+      }
+
+      // Update user with new cover picture URL
+      const { data, error } = await supabaseAdmin!
+        .from("users")
+        .update({
+          cover_picture: pictureUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", userId)
+        .select()
+        .single();
+
+      if (error) {
+        logger.error("Error updating cover picture URL:", error);
+        throw new AppError(error.message, 400);
+      }
+
+      return data as User;
+    } catch (error) {
+      logger.error("Error in updateCoverPictureUrl:", error);
+      throw error instanceof AppError
+        ? error
+        : new AppError("Failed to update cover picture URL", 500);
+    }
+  }
+
+  /**
+   * Remove a user's cover picture URL
+   */
+  static async removeCoverPictureUrl(userId: string): Promise<User> {
+    try {
+      // Get the current user to check if they exist
+      const currentUser = await this.findUserById(userId);
+
+      if (!currentUser) {
+        throw new AppError("User not found", 404);
+      }
+
+      // If there's no cover picture, nothing to remove
+      if (!currentUser.cover_picture) {
+        return currentUser;
+      }
+
+      // Update user to remove cover picture URL
+      const { data, error } = await supabaseAdmin!
+        .from("users")
+        .update({ cover_picture: null, updated_at: new Date().toISOString() })
+        .eq("id", userId)
+        .select()
+        .single();
+
+      if (error) {
+        logger.error("Error removing cover picture URL:", error);
+        throw new AppError(error.message, 400);
+      }
+
+      return data as User;
+    } catch (error) {
+      logger.error("Error in removeCoverPictureUrl:", error);
+      throw error instanceof AppError
+        ? error
+        : new AppError("Failed to remove cover picture URL", 500);
+    }
+  }
 }

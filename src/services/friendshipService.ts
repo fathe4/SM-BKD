@@ -235,11 +235,7 @@ export class FriendshipService {
           const userProfile = await getUserBasicProfile(otherUserId as string);
 
           return {
-            id: userProfile.id,
-            username: userProfile.username,
-            first_name: userProfile.first_name,
-            last_name: userProfile.last_name,
-            profile_picture: userProfile.profile_picture,
+            ...userProfile,
             friendship_id: friendship.id,
             friendship_status: friendship.status,
             is_requester: friendship.requester_id === userId,
@@ -365,9 +361,35 @@ export class FriendshipService {
     "Failed to get mutual friends"
   );
 
+  static getPendingFriendRequestIds = asyncHandler(
+    async (userId: string): Promise<string[]> => {
+      // Get both incoming and outgoing pending requests
+      const { data, error } = await supabase
+        .from("friendships")
+        .select("requester_id, addressee_id")
+        .eq("status", FriendshipStatus.PENDING)
+        .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`);
+
+      if (error) {
+        throw new AppError(error.message, 400);
+      }
+
+      // Extract the IDs of the other users involved in these requests
+      const pendingIds = data.map((friendship) =>
+        friendship.requester_id === userId
+          ? friendship.addressee_id
+          : friendship.requester_id
+      );
+
+      return pendingIds;
+    },
+    "Failed to get pending friend request IDs"
+  );
+
   /**
    * Get friend suggestions for a user
    */
+
   static getFriendSuggestions = asyncHandler(
     async (
       userId: string,
@@ -379,65 +401,81 @@ export class FriendshipService {
       const { page = 1, limit = 10 } = options;
       const offset = (page - 1) * limit;
 
-      // Get user's current friends
-      const userFriendIds = await this.getUserFriendIds(userId);
+      // OPTIMIZATION 1: Get friend-of-friend suggestions with a single query
+      // This query gets potential friends of friends, excluding existing friends and pending requests
+      const { data: fofData, error: fofError } = await supabase.rpc(
+        "get_friend_suggestions",
+        {
+          user_id: userId,
+          suggestion_limit: limit,
+          suggestion_offset: offset,
+        }
+      );
 
-      // Get friends of friends
-      let friendOfFriendIds: string[] = [];
-      if (userFriendIds.length > 0) {
-        for (const friendId of userFriendIds) {
-          const friendsFriends = await this.getUserFriendIds(friendId);
-          friendOfFriendIds = [...friendOfFriendIds, ...friendsFriends];
+      if (fofError) {
+        throw new AppError(fofError.message, 400);
+      }
+
+      let suggestions: FriendSummary[] = [];
+      let randomLimit = limit;
+
+      // If we got friend-of-friend suggestions, process them
+      if (fofData && fofData.length > 0) {
+        suggestions = fofData.map((user: any) => ({
+          id: user.id,
+          username: user.username,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          profile_picture: user.profile_picture,
+          bio: user.bio,
+          location: user.location,
+        }));
+
+        randomLimit = limit - suggestions.length;
+      }
+
+      // OPTIMIZATION 2: If we need more users, get random suggestions with a single query
+      if (randomLimit > 0) {
+        const { data: randomData, error: randomError } = await supabase.rpc(
+          "get_random_user_suggestions",
+          {
+            user_id: userId,
+            suggestion_limit: randomLimit,
+          }
+        );
+
+        if (randomError) {
+          throw new AppError(randomError.message, 400);
+        }
+
+        if (randomData && randomData.length > 0) {
+          const randomSuggestions = randomData.map((user: any) => ({
+            id: user.id,
+            username: user.username,
+            first_name: user.first_name,
+            last_name: user.last_name,
+            profile_picture: user.profile_picture,
+            bio: user.bio,
+            location: user.location,
+          }));
+
+          suggestions = [...suggestions, ...randomSuggestions];
         }
       }
 
-      // Filter out existing friends and the user themselves
-      friendOfFriendIds = friendOfFriendIds.filter(
-        (id) => !userFriendIds.includes(id) && id !== userId
+      // Get total count for pagination (single efficient query)
+      const { count, error: countError } = await supabase.rpc(
+        "get_suggestion_count",
+        { user_id: userId }
       );
 
-      // Remove duplicates
-      friendOfFriendIds = [...new Set(friendOfFriendIds)];
-
-      // If we have no suggestions via friends of friends, get some random users
-      if (friendOfFriendIds.length === 0) {
-        const { data, error } = await supabase
-          .from("users")
-          .select("id")
-          .neq("id", userId)
-          .not("id", "in", `(${userFriendIds.join(",")})`)
-          .limit(limit);
-
-        if (error) {
-          throw new AppError(error.message, 400);
-        }
-
-        friendOfFriendIds = data.map((user) => user.id);
+      if (countError) {
+        throw new AppError(countError.message, 400);
       }
-
-      // Apply pagination
-      const total = friendOfFriendIds.length;
-      const paginatedIds = friendOfFriendIds.slice(offset, offset + limit);
-
-      // Get user details for each suggestion
-      const suggestions = await Promise.all(
-        paginatedIds.map(async (friendId) => {
-          // Get user profile
-          const userProfile = await getUserBasicProfile(friendId);
-
-          return {
-            id: userProfile.id,
-            username: userProfile.username,
-            first_name: userProfile.first_name,
-            last_name: userProfile.last_name,
-            profile_picture: userProfile.profile_picture,
-          } as FriendSummary;
-        })
-      );
 
       return {
         suggestions,
-        total,
+        total: count || suggestions.length,
       };
     },
     "Failed to get friend suggestions"

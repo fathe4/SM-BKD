@@ -30,7 +30,8 @@ export interface FriendSummary {
   first_name: string;
   last_name: string;
   profile_picture?: string;
+  bio?: string;
+  location?: string;
   friendship_id?: string;
   friendship_status?: FriendshipStatus;
-  is_requester?: boolean;
 }

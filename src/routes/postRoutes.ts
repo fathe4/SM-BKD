@@ -26,6 +26,13 @@ router.use(authenticate);
 router.get("/feed", PostController.getFeed);
 
 /**
+ * @route GET /api/v1/posts/my
+ * @desc Get posts for the authenticated user
+ * @access Private
+ */
+router.get("/my", PostController.getMyPosts);
+
+/**
  * @route GET /api/v1/posts/user/:userId
  * @desc Get posts for a specific user
  * @access Private and Public (depending on post visibility)
@@ -37,12 +44,7 @@ router.get("/user/:userId", PostController.getUserPosts);
  * @desc Create a new post
  * @access Private
  */
-router.post(
-  "/",
-  uploadPostMedia, // Add this middleware before validation
-  validateCreatePost,
-  PostController.createPost
-);
+router.post("/", validateCreatePost, PostController.createPost);
 
 /**
  * @route GET /api/v1/posts/all

@@ -11,7 +11,13 @@ export class ProfileController {
    */
   static async getProfile(req: Request, res: Response) {
     try {
-      const userId = res.locals.targetUserId;
+      // Get the target user ID from locals or params or the authenticated user
+      const userId =
+        res.locals.targetUserId || req.params.userId || req.user?.id;
+
+      if (!userId) {
+        throw new AppError("User ID is required", 400);
+      }
 
       const profile = await ProfileService.getProfile(userId);
 

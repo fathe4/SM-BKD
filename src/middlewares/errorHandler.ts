@@ -37,10 +37,8 @@ export const errorHandler = (
     message = err.message;
   }
 
-  // In development, include the stack trace
-  if (process.env.NODE_ENV === "development") {
-    stack = err.stack;
-  }
+  // TEMPORARY: Include stack trace even in production for troubleshooting
+  stack = err.stack;
 
   // Log the error
   logger.error(
@@ -54,6 +52,9 @@ export const errorHandler = (
   res.status(statusCode).json({
     status,
     message,
-    stack: process.env.NODE_ENV === "development" ? stack : undefined,
+    // TEMPORARY: Include environment info for debugging
+    env: process.env.NODE_ENV,
+    // TEMPORARY: Include stack even in production for debugging
+    stack: stack,
   });
 };

@@ -1,4 +1,4 @@
-// src/middlewares/profileAuthorization.ts
+// src/middlewares/canAccess.ts
 import { Request, Response, NextFunction } from "express";
 import { UserRole } from "../types/models";
 import { AppError } from "../middlewares/errorHandler";
@@ -24,6 +24,11 @@ export const canAccessProfile = (
 
       // Get the target user ID (from params or current user)
       const targetUserId = req.params.userId || currentUserId;
+
+      // Validate that targetUserId is a valid UUID
+      if (!targetUserId || targetUserId === "undefined") {
+        throw new AppError("Invalid user ID", 400);
+      }
 
       // Set the targetUserId in locals for controller use
       res.locals.targetUserId = targetUserId;
