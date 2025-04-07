@@ -15,6 +15,7 @@ import commentRoutes from "./routes/commentRoutes";
 import standaloneCommentRoutes from "./routes/standaloneCommentRoutes";
 import friendshipRoutes from "./routes/friendshipRoutes";
 import debugRoutes from "./debug/vercelAuth";
+import privacySettingsRoutes from "./routes/privacySettingsRoutes";
 
 // Load environment variables
 config();
@@ -72,6 +73,7 @@ app.use(`${apiPrefix}/posts`, postRoutes);
 app.use(`${apiPrefix}/posts`, commentRoutes);
 app.use(`${apiPrefix}/comments`, standaloneCommentRoutes);
 app.use(`${apiPrefix}/friendships`, friendshipRoutes);
+app.use(`${apiPrefix}/privacy-settings`, privacySettingsRoutes);
 
 // Other routes will be added here as they are implemented
 // app.use(`${apiPrefix}/users`, userRoutes);

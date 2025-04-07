@@ -45,7 +45,7 @@ export class FriendshipController {
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
 
       const { friendships, total } = await FriendshipService.getUserFriendships(
-        paramUserId ?? userId,
+        userId,
         { status, page, limit }
       );
 

@@ -9,6 +9,8 @@ import {
 import { getUserBasicProfile } from "../utils/profileUtils";
 // Using string instead of UUID type from crypto to avoid template literal type issues
 import { asyncHandler } from "../utils/asyncHandler";
+import { UUID } from "crypto";
+import { logger } from "../utils/logger";
 
 export class FriendshipService {
   /**
@@ -480,4 +482,79 @@ export class FriendshipService {
     },
     "Failed to get friend suggestions"
   );
+  static async checkIfUsersAreFriends(
+    userId1: UUID,
+    userId2: UUID
+  ): Promise<boolean> {
+    try {
+      const { data, error } = await supabase
+        .from("friendships")
+        .select("status")
+        .or(
+          `and(requester_id.eq.${userId1},addressee_id.eq.${userId2}),and(requester_id.eq.${userId2},addressee_id.eq.${userId1})`
+        )
+        .eq("status", FriendshipStatus.ACCEPTED)
+        .maybeSingle();
+
+      if (error) {
+        logger.error("Error checking friendship status:", error);
+        return false;
+      }
+
+      return !!data;
+    } catch (error) {
+      logger.error("Error in checkIfUsersAreFriends:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Check if two users have mutual friends
+   */
+  static async checkIfUsersHaveMutualFriends(
+    userId1: UUID,
+    userId2: UUID
+  ): Promise<boolean> {
+    try {
+      // Get friends of user1
+      const { data: user1Friends, error: error1 } = await supabase.rpc(
+        "get_user_friends",
+        { user_id: userId1 }
+      );
+
+      if (error1) {
+        logger.error("Error getting user1 friends:", error1);
+        return false;
+      }
+
+      // Get friends of user2
+      const { data: user2Friends, error: error2 } = await supabase.rpc(
+        "get_user_friends",
+        { user_id: userId2 }
+      );
+
+      if (error2) {
+        logger.error("Error getting user2 friends:", error2);
+        return false;
+      }
+
+      // Check for mutual friends
+      const user1FriendIds = user1Friends.map(
+        (friend: any) => friend.friend_id
+      );
+      const user2FriendIds = user2Friends.map(
+        (friend: any) => friend.friend_id
+      );
+
+      // Find intersection of friend IDs
+      const mutualFriends = user1FriendIds.filter((id: UUID) =>
+        user2FriendIds.includes(id)
+      );
+
+      return mutualFriends.length > 0;
+    } catch (error) {
+      logger.error("Error in checkIfUsersHaveMutualFriends:", error);
+      return false;
+    }
+  }
 }
