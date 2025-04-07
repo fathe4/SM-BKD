@@ -9,6 +9,7 @@ import {
 import { getUserBasicProfile } from "../utils/profileUtils";
 // Using string instead of UUID type from crypto to avoid template literal type issues
 import { asyncHandler } from "../utils/asyncHandler";
+import { UUID } from "crypto";
 
 export class FriendshipService {
   /**
@@ -479,5 +480,78 @@ export class FriendshipService {
       };
     },
     "Failed to get friend suggestions"
+  );
+
+  /**
+   * Check if two users are friends
+   */
+  static checkIfUsersAreFriends = asyncHandler(
+    async (userId1: UUID, userId2: UUID): Promise<boolean> => {
+      const { data, error } = await supabase
+        .from("friendships")
+        .select("status")
+        .or(
+          `and(requester_id.eq.${userId1},addressee_id.eq.${userId2}),and(requester_id.eq.${userId2},addressee_id.eq.${userId1})`
+        )
+        .eq("status", FriendshipStatus.ACCEPTED)
+        .maybeSingle();
+
+      if (error) {
+        throw new AppError(
+          `Failed to check friendship status: ${error.message}`,
+          400
+        );
+      }
+
+      return !!data;
+    },
+    "Failed to check if users are friends"
+  );
+
+  /**
+   * Check if users have mutual friends
+   */
+  static checkIfUsersHaveMutualFriends = asyncHandler(
+    async (userId1: UUID, userId2: UUID): Promise<boolean> => {
+      // Get user1's friends
+      const { data: user1Friends, error: error1 } = await supabase
+        .from("friendships")
+        .select("requester_id, addressee_id")
+        .or(`requester_id.eq.${userId1},addressee_id.eq.${userId1}`)
+        .eq("status", FriendshipStatus.ACCEPTED);
+
+      if (error1) {
+        throw new AppError(`Failed to get friends: ${error1.message}`, 400);
+      }
+
+      // Get user2's friends
+      const { data: user2Friends, error: error2 } = await supabase
+        .from("friendships")
+        .select("requester_id, addressee_id")
+        .or(`requester_id.eq.${userId2},addressee_id.eq.${userId2}`)
+        .eq("status", FriendshipStatus.ACCEPTED);
+
+      if (error2) {
+        throw new AppError(`Failed to get friends: ${error2.message}`, 400);
+      }
+
+      // Extract friend IDs for user1
+      const user1FriendIds = user1Friends.map((f) =>
+        f.requester_id === userId1 ? f.addressee_id : f.requester_id
+      );
+
+      // Extract friend IDs for user2
+      const user2FriendIds = user2Friends.map((f) =>
+        f.requester_id === userId2 ? f.addressee_id : f.requester_id
+      );
+
+      // Check for any mutual friends
+      const mutualFriends = user1FriendIds.filter((id) =>
+        user2FriendIds.includes(id)
+      );
+
+      return mutualFriends.length > 0;
+    },
+    "Failed to check mutual friends"
   );
 }
