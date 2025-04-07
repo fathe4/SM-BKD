@@ -9,6 +9,7 @@ import { PrivacySettingsService } from "../services/privacySettingsService";
 import { MessageRetentionPeriod } from "../models/privacy-settings.model";
 import { supabase } from "@/config/supabase";
 import { logger } from "@/utils/logger";
+import { getRequiredIds } from "@/utils/privacyHelpers";
 
 /**
  * Middleware to enforce privacy policies for various operations
@@ -223,6 +224,83 @@ export class PrivacyPolicyMiddleware {
   };
 
   /**
+   * Check if a user can view another user's profile
+   */
+  static canViewProfile = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { userId, targetId } = await getRequiredIds(req, ["targetId"]);
+
+      // Same user can always view their own profile
+      if (userId === targetId) {
+        return next();
+      }
+
+      // Get target user's privacy settings
+      const targetSettings =
+        await PrivacySettingsService.getUserPrivacySettings(targetId);
+      const visibility = targetSettings.settings.baseSettings.profileVisibility;
+
+      // Public profiles are visible to everyone
+      if (visibility === "public") {
+        return next();
+      }
+
+      // For friends-only or private profiles, check friendship
+      if (visibility === "friends") {
+        const areFriends = await FriendshipService.checkIfUsersAreFriends(
+          userId,
+          targetId
+        );
+        if (!areFriends) {
+          throw new AppError("This profile is only visible to friends", 403);
+        }
+        return next();
+      }
+
+      // Private profiles not visible to others
+      if (visibility === "private") {
+        throw new AppError("This profile is private", 403);
+      }
+
+      throw new AppError("Unable to determine profile visibility", 500);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * Check if a user can tag another user
+   */
+  static canTagUser = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { targetId } = await getRequiredIds(req, ["targetId"]);
+
+      // Get target user's privacy settings
+      const targetSettings =
+        await PrivacySettingsService.getUserPrivacySettings(targetId);
+
+      // Check if user allows tagging
+      if (!targetSettings.settings.allowTagging) {
+        throw new AppError("This user doesn't allow tagging", 403);
+      }
+
+      // For extra security, you might want to check friendship status too
+
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
    * Apply various privacy checks based on operation type
    */
   static enforce = (
@@ -255,8 +333,6 @@ export class PrivacyPolicyMiddleware {
         };
     }
   };
-  static canViewProfile: any;
-  static canTagUser: any;
 }
 
 // Helper function to check if a user is part of a chat
