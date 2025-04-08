@@ -2,9 +2,12 @@ import express, { Application, Request, Response } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
+import http from "http";
 import { config } from "dotenv";
 import { errorHandler } from "./middlewares/errorHandler";
 import { logger, morganStream } from "./utils/logger";
+import { initializeSocketIO } from "./socketio";
+
 import authRoutes from "./routes/authRoutes";
 import profileRoutes from "./routes/profileRoutes";
 import profilePictureRoutes from "./routes/profilePictureRoutes";
@@ -16,9 +19,9 @@ import standaloneCommentRoutes from "./routes/standaloneCommentRoutes";
 import friendshipRoutes from "./routes/friendshipRoutes";
 import debugRoutes from "./debug/vercelAuth";
 import privacySettingsRoutes from "./routes/privacySettingsRoutes";
+import messageRoutes from "./routes/messageRoutes";
 
-import http from "http";
-import { initializeSocketIO } from "./socketio";
+import { setupMessageRetentionJob } from "./jobs/messageRetentionJob";
 
 // Load environment variables
 config();
@@ -71,6 +74,9 @@ app.get("/health", (req: Request, res: Response) => {
   });
 });
 
+// Initialize the message retention job when server starts
+setupMessageRetentionJob();
+
 // API routes
 app.use(`${apiPrefix}/auth`, authRoutes);
 app.use(`${apiPrefix}/profiles`, profileRoutes);
@@ -82,6 +88,7 @@ app.use(`${apiPrefix}/posts`, commentRoutes);
 app.use(`${apiPrefix}/comments`, standaloneCommentRoutes);
 app.use(`${apiPrefix}/friendships`, friendshipRoutes);
 app.use(`${apiPrefix}/privacy-settings`, privacySettingsRoutes);
+app.use(`${apiPrefix}/messages`, messageRoutes);
 
 // Other routes will be added here as they are implemented
 // app.use(`${apiPrefix}/users`, userRoutes);

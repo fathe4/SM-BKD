@@ -187,7 +187,7 @@ export class MessageService {
         throw new AppError(error.message, 400);
       }
 
-      return data.map((item) => ({
+      return data.map((item: any) => ({
         id: item.user_id,
         username: item.users.username,
       }));
@@ -217,7 +217,7 @@ export class MessageService {
       throw new AppError(error.message, 400);
     }
 
-    return data ? data.length : 0;
+    return data ? (data as any[]).length : 0;
   }, "Failed to cleanup expired messages");
 
   /**
@@ -241,7 +241,7 @@ export class MessageService {
       throw new AppError(error.message, 400);
     }
 
-    return data ? data.length : 0;
+    return data ? (data as any[]).length : 0;
   }, "Failed to cleanup read messages");
 }
 
