@@ -1,0 +1,632 @@
+/* eslint-disable indent */
+import { UUID } from "crypto";
+import { supabase, supabaseAdmin } from "../config/supabase";
+import { AppError } from "../middlewares/errorHandler";
+import {
+  Chat,
+  ChatCreate,
+  ChatParticipantCreate,
+  ChatSummary,
+  ChatUpdate,
+  MessageWithUser,
+} from "../models/chat.model";
+import { asyncHandler } from "../utils/asyncHandler";
+import { FriendshipService } from "./friendshipService";
+import { PrivacySettingsService } from "./privacySettingsService";
+
+export class ChatService {
+  /**
+   * Create a new chat
+   */
+  static createChat = asyncHandler(
+    async (
+      chatData: ChatCreate,
+      participants: ChatParticipantCreate[]
+    ): Promise<Chat> => {
+      // Start a transaction
+      const { data: chat, error: chatError } = await supabaseAdmin!
+        .from("chats")
+        .insert(chatData)
+        .select()
+        .single();
+
+      if (chatError) {
+        throw new AppError(chatError.message, 400);
+      }
+
+      // Add participants
+      if (participants.length > 0) {
+        const participantsWithChatId = participants.map((p) => ({
+          ...p,
+          chat_id: chat.id,
+        }));
+
+        const { error: participantsError } = await supabaseAdmin!
+          .from("chat_participants")
+          .insert(participantsWithChatId);
+
+        if (participantsError) {
+          throw new AppError(participantsError.message, 400);
+        }
+      }
+
+      return chat as Chat;
+    },
+    "Failed to create chat"
+  );
+
+  /**
+   * Get a chat by ID
+   */
+  static getChatById = asyncHandler(
+    async (chatId: string, userId: string): Promise<Chat | null> => {
+      // First verify the user is a participant
+      const isParticipant = await this.isUserChatParticipant(userId, chatId);
+
+      if (!isParticipant) {
+        throw new AppError("You are not a participant in this chat", 403);
+      }
+
+      const { data, error } = await supabase
+        .from("chats")
+        .select("*")
+        .eq("id", chatId)
+        .single();
+
+      if (error) {
+        if (error.code === "PGRST116") {
+          return null;
+        }
+        throw new AppError(error.message, 400);
+      }
+
+      return data as Chat;
+    },
+    "Failed to get chat"
+  );
+
+  /**
+   * Get all chats for a user with chat summaries
+   */
+  static getUserChats = asyncHandler(
+    async (
+      userId: string,
+      page = 1,
+      limit = 20
+    ): Promise<{ chats: ChatSummary[]; total: number }> => {
+      const offset = (page - 1) * limit;
+
+      // Get chats where the user is a participant
+      const {
+        data: chatParticipations,
+        error: participationError,
+        count,
+      } = await supabase
+        .from("chat_participants")
+        .select("chat_id", { count: "exact" })
+        .eq("user_id", userId)
+        .range(offset, offset + limit - 1);
+
+      if (participationError) {
+        throw new AppError(participationError.message, 400);
+      }
+
+      if (!chatParticipations || chatParticipations.length === 0) {
+        return { chats: [], total: 0 };
+      }
+
+      const chatIds = chatParticipations.map((p) => p.chat_id);
+
+      // Get chat details with last message
+      const chatSummaries = await Promise.all(
+        chatIds.map(async (chatId) => {
+          return await this.getChatSummary(chatId, userId);
+        })
+      );
+
+      // Sort by last message timestamp (most recent first)
+      chatSummaries.sort((a, b) => {
+        const dateA = a.last_message?.created_at
+          ? new Date(a.last_message.created_at)
+          : new Date(0);
+        const dateB = b.last_message?.created_at
+          ? new Date(b.last_message.created_at)
+          : new Date(0);
+        return dateB.getTime() - dateA.getTime();
+      });
+
+      return {
+        chats: chatSummaries,
+        total: count || 0,
+      };
+    },
+    "Failed to get user chats"
+  );
+
+  /**
+   * Get a summary of a chat with last message and participants
+   */
+  static getChatSummary = asyncHandler(
+    async (chatId: string, userId: string): Promise<ChatSummary> => {
+      // Get the chat details
+      const { data: chat, error: chatError } = await supabase
+        .from("chats")
+        .select("*")
+        .eq("id", chatId)
+        .single();
+
+      if (chatError) {
+        throw new AppError(chatError.message, 400);
+      }
+
+      // Get participants
+      const { data: participantsData, error: participantsError } =
+        await supabase
+          .from("chat_participants")
+          .select(
+            `
+          id, 
+          user_id,
+          users!inner (
+            id, 
+            username, 
+            profile_picture
+          )
+        `
+          )
+          .eq("chat_id", chatId);
+
+      if (participantsError) {
+        throw new AppError(participantsError.message, 400);
+      }
+
+      // Format participants with respect to privacy settings
+      const participants = await Promise.all(
+        participantsData.map(async (p: any) => {
+          const participantId = p.user_id;
+
+          // If it's the current user, include their info
+          if (participantId === userId) {
+            return {
+              id: p.users.id,
+              username: p.users.username,
+              profile_picture: p.users.profile_picture,
+            };
+          }
+
+          // Check privacy settings for other users
+          const settings = await PrivacySettingsService.getUserPrivacySettings(
+            participantId
+          );
+          const profileVisibility =
+            settings.settings.baseSettings.profileVisibility;
+
+          // If profile is private, only show username
+          if (profileVisibility === "private") {
+            return {
+              id: p.users.id,
+              username: p.users.username,
+              profile_picture: null,
+            };
+          }
+
+          // If profile is friends-only, check friendship
+          if (profileVisibility === "friends") {
+            const areFriends = await FriendshipService.checkIfUsersAreFriends(
+              userId as UUID,
+              participantId
+            );
+            if (!areFriends) {
+              return {
+                id: p.users.id,
+                username: p.users.username,
+                profile_picture: null,
+              };
+            }
+          }
+
+          // Otherwise return full info
+          return {
+            id: p.users.id,
+            username: p.users.username,
+            profile_picture: p.users.profile_picture,
+          };
+        })
+      );
+
+      // Get last message
+      const { data: lastMessageData } = (await supabase
+        .from("messages")
+        .select(
+          `
+          id,
+          content,
+          created_at,
+          sender_id,
+          users:sender_id (
+            username
+          )
+        `
+        )
+        .eq("chat_id", chatId)
+        .eq("is_deleted", false)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single()) as { data: MessageWithUser | null; error: any };
+
+      // Count unread messages
+      const { count: unreadCount, error: unreadError } = await supabase
+        .from("messages")
+        .select("id", { count: "exact" })
+        .eq("chat_id", chatId)
+        .eq("is_read", false)
+        .neq("sender_id", userId);
+
+      if (unreadError) {
+        throw new AppError(unreadError.message, 400);
+      }
+
+      // Format the chat summary
+      return {
+        id: chat.id,
+        name: getChatName(chat, participants, userId),
+        is_group_chat: chat.is_group_chat,
+        avatar: getChatAvatar(chat, participants, userId),
+        last_message: lastMessageData
+          ? {
+              id: lastMessageData.id,
+              content: lastMessageData.content,
+              sender_name: lastMessageData.users?.username || "Unknown",
+              created_at: new Date(lastMessageData.created_at),
+            }
+          : undefined,
+        unread_count: unreadCount || 0,
+        participants,
+      };
+    },
+    "Failed to get chat summary"
+  );
+
+  /**
+   * Update a chat
+   */
+  static updateChat = asyncHandler(
+    async (
+      chatId: string,
+      userId: string,
+      updateData: ChatUpdate
+    ): Promise<Chat> => {
+      // Verify the user is a participant with admin role
+      const isAdmin = await this.isUserChatAdmin(userId, chatId);
+
+      if (!isAdmin) {
+        throw new AppError(
+          "You don't have permission to update this chat",
+          403
+        );
+      }
+
+      const { data, error } = await supabaseAdmin!
+        .from("chats")
+        .update(updateData)
+        .eq("id", chatId)
+        .select()
+        .single();
+
+      if (error) {
+        throw new AppError(error.message, 400);
+      }
+
+      return data as Chat;
+    },
+    "Failed to update chat"
+  );
+
+  /**
+   * Add participants to a chat
+   */
+  static addChatParticipants = asyncHandler(
+    async (
+      chatId: string,
+      userId: string,
+      newParticipants: ChatParticipantCreate[]
+    ): Promise<void> => {
+      // Verify the user is a participant with admin role for group chats
+      const chat = await this.getChatById(chatId, userId);
+
+      if (!chat) {
+        throw new AppError("Chat not found", 404);
+      }
+
+      if (chat.is_group_chat) {
+        const isAdmin = await this.isUserChatAdmin(userId, chatId);
+        if (!isAdmin) {
+          throw new AppError(
+            "You don't have permission to add participants to this chat",
+            403
+          );
+        }
+      } else {
+        // For direct chats, only allow adding if there are fewer than 2 participants
+        const currentParticipantCount = await this.getChatParticipantCount(
+          chatId
+        );
+        if (currentParticipantCount >= 2) {
+          throw new AppError(
+            "Cannot add more participants to a direct chat",
+            400
+          );
+        }
+      }
+
+      // Add participants
+      const participantsWithChatId = newParticipants.map((p) => ({
+        ...p,
+        chat_id: chatId,
+      }));
+
+      const { error } = await supabaseAdmin!
+        .from("chat_participants")
+        .insert(participantsWithChatId);
+
+      if (error) {
+        throw new AppError(error.message, 400);
+      }
+    },
+    "Failed to add chat participants"
+  );
+
+  /**
+   * Remove a participant from a chat
+   */
+  static removeChatParticipant = asyncHandler(
+    async (
+      chatId: string,
+      userId: string,
+      participantId: string
+    ): Promise<void> => {
+      const chat = await this.getChatById(chatId, userId);
+
+      if (!chat) {
+        throw new AppError("Chat not found", 404);
+      }
+
+      // Check if user has permission to remove participants
+      const canRemove = await this.canRemoveParticipant(
+        chatId,
+        userId,
+        participantId
+      );
+
+      if (!canRemove) {
+        throw new AppError(
+          "You don't have permission to remove this participant",
+          403
+        );
+      }
+
+      const { error } = await supabaseAdmin!
+        .from("chat_participants")
+        .delete()
+        .eq("chat_id", chatId)
+        .eq("user_id", participantId);
+
+      if (error) {
+        throw new AppError(error.message, 400);
+      }
+    },
+    "Failed to remove chat participant"
+  );
+
+  /**
+   * Leave a chat
+   */
+  static leaveChat = asyncHandler(
+    async (chatId: string, userId: string): Promise<void> => {
+      // Verify the user is a participant
+      const isParticipant = await this.isUserChatParticipant(userId, chatId);
+
+      if (!isParticipant) {
+        throw new AppError("You are not a participant in this chat", 403);
+      }
+
+      const { error } = await supabaseAdmin!
+        .from("chat_participants")
+        .delete()
+        .eq("chat_id", chatId)
+        .eq("user_id", userId);
+
+      if (error) {
+        throw new AppError(error.message, 400);
+      }
+
+      // If this was a direct chat or there are no participants left, delete the chat
+      const remainingParticipants = await this.getChatParticipantCount(chatId);
+
+      if (remainingParticipants === 0) {
+        await this.deleteChat(chatId);
+      }
+    },
+    "Failed to leave chat"
+  );
+
+  /**
+   * Delete a chat (only for admins or if all participants have left)
+   */
+  static deleteChat = asyncHandler(
+    async (chatId: string, userId?: string): Promise<void> => {
+      // If userId is provided, verify they're an admin
+      if (userId) {
+        const isAdmin = await this.isUserChatAdmin(userId, chatId);
+
+        if (!isAdmin) {
+          throw new AppError(
+            "You don't have permission to delete this chat",
+            403
+          );
+        }
+      }
+
+      // Delete all messages in the chat
+      const { error: messagesError } = await supabaseAdmin!
+        .from("messages")
+        .delete()
+        .eq("chat_id", chatId);
+
+      if (messagesError) {
+        throw new AppError(messagesError.message, 400);
+      }
+
+      // Delete all participants
+      const { error: participantsError } = await supabaseAdmin!
+        .from("chat_participants")
+        .delete()
+        .eq("chat_id", chatId);
+
+      if (participantsError) {
+        throw new AppError(participantsError.message, 400);
+      }
+
+      // Delete the chat
+      const { error } = await supabaseAdmin!
+        .from("chats")
+        .delete()
+        .eq("id", chatId);
+
+      if (error) {
+        throw new AppError(error.message, 400);
+      }
+    },
+    "Failed to delete chat"
+  );
+
+  /**
+   * Helper function to check if a user is a participant in a chat
+   */
+  static isUserChatParticipant = asyncHandler(
+    async (userId: string, chatId: string): Promise<boolean> => {
+      const { data, error } = await supabase
+        .from("chat_participants")
+        .select("id")
+        .eq("chat_id", chatId)
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (error) {
+        throw new AppError(error.message, 400);
+      }
+
+      return !!data;
+    },
+    "Failed to check chat participation"
+  );
+
+  /**
+   * Helper function to check if a user is an admin in a chat
+   */
+  static isUserChatAdmin = asyncHandler(
+    async (userId: string, chatId: string): Promise<boolean> => {
+      const { data, error } = await supabase
+        .from("chat_participants")
+        .select("role")
+        .eq("chat_id", chatId)
+        .eq("user_id", userId)
+        .eq("role", "admin")
+        .maybeSingle();
+
+      if (error) {
+        throw new AppError(error.message, 400);
+      }
+
+      return !!data;
+    },
+    "Failed to check chat admin status"
+  );
+
+  /**
+   * Helper function to get the count of participants in a chat
+   */
+  static getChatParticipantCount = asyncHandler(
+    async (chatId: string): Promise<number> => {
+      const { count, error } = await supabase
+        .from("chat_participants")
+        .select("id", { count: "exact" })
+        .eq("chat_id", chatId);
+
+      if (error) {
+        throw new AppError(error.message, 400);
+      }
+
+      return count || 0;
+    },
+    "Failed to get participant count"
+  );
+
+  /**
+   * Helper function to check if a user can remove a participant
+   */
+  static canRemoveParticipant = asyncHandler(
+    async (
+      chatId: string,
+      userId: string,
+      participantId: string
+    ): Promise<boolean> => {
+      // Users can remove themselves
+      if (userId === participantId) {
+        return true;
+      }
+
+      // Group chat admins can remove anyone
+      const isAdmin = await this.isUserChatAdmin(userId, chatId);
+      if (isAdmin) {
+        return true;
+      }
+
+      return false;
+    },
+    "Failed to check removal permission"
+  );
+}
+
+/**
+ * Helper function to get the chat name
+ */
+function getChatName(
+  chat: Chat,
+  participants: any[],
+  currentUserId: string
+): string {
+  if (chat.name) {
+    return chat.name;
+  }
+
+  if (!chat.is_group_chat) {
+    // For direct chats, use the other participant's name
+    const otherParticipant = participants.find((p) => p.id !== currentUserId);
+    return otherParticipant ? otherParticipant.username : "Chat";
+  }
+
+  // Fallback for group chats with no name
+  return "Group Chat";
+}
+
+/**
+ * Helper function to get the chat avatar
+ */
+function getChatAvatar(
+  chat: Chat,
+  participants: any[],
+  currentUserId: string
+): string | undefined {
+  if (chat.avatar) {
+    return chat.avatar;
+  }
+
+  if (!chat.is_group_chat) {
+    // For direct chats, use the other participant's avatar
+    const otherParticipant = participants.find((p) => p.id !== currentUserId);
+    return otherParticipant?.profile_picture || undefined; // Return undefined instead of null
+  }
+
+  return undefined; // Return undefined instead of null
+}
