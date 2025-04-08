@@ -17,13 +17,21 @@ import friendshipRoutes from "./routes/friendshipRoutes";
 import debugRoutes from "./debug/vercelAuth";
 import privacySettingsRoutes from "./routes/privacySettingsRoutes";
 
+import http from "http";
+import { initializeSocketIO } from "./socketio";
+
 // Load environment variables
 config();
 
 // Create Express application
 const app: Application = express();
+const server = http.createServer(app);
+
 const port = process.env.PORT || 5000;
+const socket_port = process.env.socket_port || 7979;
 const apiPrefix = process.env.API_PREFIX || "/api/v1";
+
+initializeSocketIO(server);
 
 // Apply middlewares
 app.use(
@@ -102,5 +110,14 @@ app.listen(port, () => {
   logger.info(`API accessible at http://localhost:${port}${apiPrefix}`);
 });
 // }
+
+server.listen(socket_port, () => {
+  logger.info(
+    `Server running on port ${socket_port} in ${
+      process.env.NODE_ENV || "development"
+    } mode`
+  );
+  logger.info(`API accessible at http://localhost:${socket_port}${apiPrefix}`);
+});
 
 export default app;
