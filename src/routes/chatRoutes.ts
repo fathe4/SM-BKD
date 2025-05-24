@@ -85,4 +85,6 @@ router.delete("/:chatId/leave", ChatController.leaveChat);
  */
 router.get("/:chatId/messages", MessageController.getMessages);
 
+router.get("/:chatId/participants", ChatController.getChatParticipants);
+
 export default router;

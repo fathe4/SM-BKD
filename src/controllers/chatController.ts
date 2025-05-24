@@ -3,6 +3,7 @@ import { controllerHandler } from "../utils/controllerHandler";
 import { ChatService } from "../services/chatService";
 import { UUID } from "crypto";
 import { MemberRole } from "../models/group-page.model";
+import { AppError } from "../middlewares/errorHandler";
 
 export class ChatController {
   /**
@@ -22,18 +23,16 @@ export class ChatController {
       creator_id: is_group_chat ? userId : undefined,
     };
 
-    // Create participant data
-    // Add current user as admin for group chats or member for direct chats
     const participantsData = [
       {
         user_id: userId,
         role: is_group_chat ? MemberRole.ADMIN : MemberRole.MEMBER,
-        is_muted: false,
+        // is_muted: false,
       },
       ...participants.map((participantId: string) => ({
         user_id: participantId,
-        role: MemberRole.MEMBER,
-        is_muted: false,
+        role: MemberRole.ADMIN,
+        // is_muted: false,
       })),
     ];
 
@@ -215,4 +214,41 @@ export class ChatController {
       message: "Chat deleted successfully",
     });
   });
+
+  /**
+   * Get chat participants
+   * @route GET /api/v1/chats/:chatId/participants
+   */
+  static getChatParticipants = controllerHandler(
+    async (req: Request, res: Response) => {
+      const { chatId } = req.params;
+
+      // Pagination parameters
+      const page = req.query.page ? parseInt(req.query.page as string) : 1;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+
+      if (!chatId) {
+        throw new AppError("Chat ID is required", 400);
+      }
+
+      const { participants, total } = await ChatService.getChatParticipants(
+        chatId,
+        {
+          page,
+          limit,
+        }
+      );
+
+      res.status(200).json({
+        status: "success",
+        data: {
+          participants,
+          total,
+          page,
+          totalPages: Math.ceil(total / limit),
+          limit,
+        },
+      });
+    }
+  );
 }

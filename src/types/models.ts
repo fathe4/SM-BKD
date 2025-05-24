@@ -1,3 +1,5 @@
+import { MemberRole } from "../models";
+
 // Base model interface with common fields
 export interface BaseModel {
   id: string;
@@ -98,4 +100,21 @@ export interface ProfileWithUserDetails extends Profile {
     is_verified: boolean;
   };
   age?: number; // Calculated field
+}
+
+export interface ChatParticipantDetails {
+  id: string;
+  chat_id: string;
+  user_id: string;
+  role: MemberRole;
+  joined_at: Date;
+  last_read?: Date;
+  user: {
+    id: string;
+    username: string;
+    first_name: string;
+    last_name: string;
+    profile_picture?: string;
+    is_verified?: boolean;
+  };
 }

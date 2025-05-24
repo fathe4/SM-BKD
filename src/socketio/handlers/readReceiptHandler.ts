@@ -1,8 +1,8 @@
-import { messageService } from "../services/messageService";
 import { Server as SocketIOServer, Socket } from "socket.io";
-import { logger } from "./logger";
-import { PrivacySettingsService } from "../services/privacySettingsService";
-import { getUserSocketIds } from "../socketio/handlers/connectionHandler";
+import { logger } from "../../utils/logger";
+import { PrivacySettingsService } from "../../services/privacySettingsService";
+import { getUserSocketIds } from "./connectionHandler";
+import { enhancedMessageService } from "../../services/enhancedMessageService";
 
 /**
  * Handle read receipt-specific functionality
@@ -19,6 +19,8 @@ export function readReceiptHandler(io: SocketIOServer, socket: Socket): void {
     "messages:readBatch",
     async (data: { chatId: string; messageIds: string[] }) => {
       try {
+        console.log("Received readBatch event:", data);
+
         const { chatId, messageIds } = data;
 
         if (!Array.isArray(messageIds) || messageIds.length === 0) {
@@ -30,16 +32,21 @@ export function readReceiptHandler(io: SocketIOServer, socket: Socket): void {
           messageIds.map(async (messageId) => {
             try {
               // Mark as read in database
-              await messageService.markMessageAsRead(messageId, userId);
+              const { readReceiptSent, message } =
+                await enhancedMessageService.markMessageAsRead(
+                  messageId,
+                  userId
+                );
+              console.log(readReceiptSent, message);
 
               // Get the message to find sender
-              const message = await messageService.getMessageById(messageId);
+              //   const message = await messageService.getMessageById(messageId);
 
               if (!message) {
                 return { messageId, success: false, reason: "not_found" };
               }
 
-              return { messageId, success: true, message };
+              return { messageId, success: true, message, readReceiptSent };
             } catch (error) {
               logger.error(
                 `Error marking message ${messageId} as read:`,
@@ -97,10 +104,10 @@ export function readReceiptHandler(io: SocketIOServer, socket: Socket): void {
         }
 
         // Update user's last read position in the chat
-        socket.to(chatId).emit("chat:activity", {
+        io.to(chatId).emit("chat:activity", {
           chatId,
           userId,
-          lastRead: messageIds[messageIds.length - 1], // Assuming messages are in chronological order
+          lastRead: messageIds[messageIds.length - 1],
           timestamp: new Date(),
         });
       } catch (error) {
@@ -108,17 +115,4 @@ export function readReceiptHandler(io: SocketIOServer, socket: Socket): void {
       }
     }
   );
-
-  // Handle displaying typing indicator
-  socket.on("chat:typing", (data: { chatId: string; isTyping: boolean }) => {
-    const { chatId, isTyping } = data;
-
-    // Broadcast typing status to other users in the chat
-    socket.to(chatId).emit("chat:typing", {
-      chatId,
-      userId,
-      isTyping,
-      timestamp: new Date(),
-    });
-  });
 }

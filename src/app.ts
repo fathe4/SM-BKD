@@ -20,6 +20,8 @@ import friendshipRoutes from "./routes/friendshipRoutes";
 import debugRoutes from "./debug/vercelAuth";
 import privacySettingsRoutes from "./routes/privacySettingsRoutes";
 import messageRoutes from "./routes/messageRoutes";
+import chatRoutes from "./routes/chatRoutes";
+import photoRoutes from "./routes/photoRoutes";
 
 import { setupMessageRetentionJob } from "./jobs/messageRetentionJob";
 
@@ -89,6 +91,8 @@ app.use(`${apiPrefix}/comments`, standaloneCommentRoutes);
 app.use(`${apiPrefix}/friendships`, friendshipRoutes);
 app.use(`${apiPrefix}/privacy-settings`, privacySettingsRoutes);
 app.use(`${apiPrefix}/messages`, messageRoutes);
+app.use(`${apiPrefix}/chats`, chatRoutes);
+app.use(`${apiPrefix}/photos`, photoRoutes);
 
 // Other routes will be added here as they are implemented
 // app.use(`${apiPrefix}/users`, userRoutes);
@@ -117,6 +121,13 @@ app.listen(port, () => {
   logger.info(`API accessible at http://localhost:${port}${apiPrefix}`);
 });
 // }
+
+app.use((req, _res, next) => {
+  if (Object.keys(req.headers).length === 0) {
+    logger.warn(`⚠️  No headers on ${req.method} ${req.originalUrl}`);
+  }
+  next();
+});
 
 server.listen(socket_port, () => {
   logger.info(

@@ -21,19 +21,18 @@ export class EnhancedMessageService {
       messageData: Omit<
         Message,
         "id" | "created_at" | "is_read" | "is_deleted" | "auto_delete_at"
-      > & {
-        retention_policy?: MessageRetentionPeriod;
-      }
+      >
     ): Promise<Message> => {
       // Calculate auto_delete_at based on retention policy
-      let autoDeleteAt: Date | undefined;
+      const userSettings = await PrivacySettingsService.getUserPrivacySettings(
+        messageData.sender_id
+      );
 
-      if (messageData.retention_policy) {
-        autoDeleteAt = this.calculateAutoDeleteTime(
-          messageData.retention_policy
-        );
-        delete messageData.retention_policy; // Remove from data before inserting
-      }
+      const retentionPeriod =
+        userSettings.settings.messageSettings?.messageRetentionPeriod ||
+        MessageRetentionPeriod.FOREVER;
+
+      const autoDeleteAt = this.calculateAutoDeleteTime(retentionPeriod);
 
       // Create message with auto_delete_at
       const { data, error } = await supabaseAdmin!
@@ -43,6 +42,7 @@ export class EnhancedMessageService {
           is_read: false,
           is_deleted: false,
           auto_delete_at: autoDeleteAt,
+          retention_policy: retentionPeriod,
           created_at: new Date(),
         })
         .select()
@@ -69,7 +69,7 @@ export class EnhancedMessageService {
       // First update the message
       const { data, error } = await supabaseAdmin!
         .from("messages")
-        .update({ is_read: true })
+        .update({ is_read: true, read_at: new Date().toISOString() })
         .eq("id", messageId)
         .select()
         .single();
@@ -191,7 +191,19 @@ export class EnhancedMessageService {
       // Get messages with pagination, sorted by creation time
       const { data, error, count } = await supabase
         .from("messages")
-        .select("*", { count: "exact" })
+        .select(
+          `
+            *,
+            sender:users!sender_id(
+            id,
+            username,
+            first_name, 
+            last_name,
+            profile_picture
+            )
+        `,
+          { count: "exact" }
+        )
         .eq("chat_id", chatId)
         .eq("is_deleted", false)
         .order("created_at", { ascending: false })
@@ -206,6 +218,13 @@ export class EnhancedMessageService {
         (msg) => !msg.is_read && msg.sender_id !== userId
       );
 
+      const modifiedData = data.map((message) => ({
+        ...message,
+        is_read: false,
+      }));
+
+      console.log(modifiedData, "modifiedData");
+
       // Process read statuses in the background (non-blocking)
       if (unreadMessages.length > 0) {
         this.processUnreadMessages(unreadMessages, userId).catch((err) => {
@@ -214,7 +233,7 @@ export class EnhancedMessageService {
       }
 
       return {
-        messages: data as Message[],
+        messages: modifiedData as Message[],
         total: count || 0,
       };
     },
@@ -336,11 +355,13 @@ export class EnhancedMessageService {
         senderSettings.settings.messageSettings?.messageRetentionPeriod;
 
       if (retentionPolicy === MessageRetentionPeriod.AFTER_READ) {
+        console.log(retentionPolicy, "retentionPolicy");
+
         // Immediately delete the message
         await supabaseAdmin!
           .from("messages")
           .update({
-            is_deleted: true,
+            is_message_auto_deleted: true,
             content:
               "[This message was automatically deleted after being read]",
             media: [],

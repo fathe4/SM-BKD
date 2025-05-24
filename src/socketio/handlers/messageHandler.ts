@@ -1,7 +1,6 @@
 /* eslint-disable indent */
 import { Server as SocketIOServer, Socket } from "socket.io";
 import { logger } from "../../utils/logger";
-import { v4 as uuidv4 } from "uuid";
 import { MessageRetentionPeriod } from "../../models/privacy-settings.model";
 import { PrivacySettingsService } from "../../services/privacySettingsService";
 import { getUserStatus } from "../services/presenceService";
@@ -9,6 +8,8 @@ import { getUserSocketIds } from "./connectionHandler";
 import { messageService } from "../../services/messageService";
 import { getIO } from "..";
 import { UUID } from "crypto";
+import { ChatService } from "../../services/chatService";
+import { enhancedMessageService } from "../../services/enhancedMessageService";
 
 // Types for message events
 interface SendMessageData {
@@ -16,6 +17,7 @@ interface SendMessageData {
   content?: string;
   media?: Array<{ url: string; type: string }>;
   replyToId?: string;
+  sender: any;
 }
 
 interface ReadReceiptData {
@@ -40,7 +42,7 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
   // Handle new message
   socket.on("message:send", async (data: SendMessageData) => {
     try {
-      const { chatId, content, media } = data;
+      const { chatId, content, media, sender } = data;
 
       // Check if empty message
       if (!content && (!media || media.length === 0)) {
@@ -50,50 +52,84 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
         return;
       }
 
-      // Generate a new message ID
-      const messageId = uuidv4();
-
-      // Get retention policy for this user/chat
-      const userSettings = await PrivacySettingsService.getUserPrivacySettings(
-        userId
-      );
-      const retentionPeriod =
-        userSettings.settings.messagePrivacy?.messageRetentionPeriod ||
-        MessageRetentionPeriod.FOREVER;
-
-      // Calculate auto-delete time based on retention policy
-      let autoDeleteAt: Date | undefined;
-
-      if (retentionPeriod !== MessageRetentionPeriod.FOREVER) {
-        autoDeleteAt = calculateAutoDeleteTime(retentionPeriod);
-      }
-
       // Convert media objects to strings (JSON stringify) if needed
       const mediaStrings = media
         ? media.map((item) => JSON.stringify(item))
         : [];
 
       // Create message in database
-      const message = await messageService.createMessage({
-        id: messageId as UUID,
+      const message = await enhancedMessageService.createMessage({
         chat_id: chatId as UUID,
         sender_id: userId as UUID,
         content,
         media: mediaStrings, // Use string array format
-        is_read: false,
-        created_at: new Date(),
-        auto_delete_at: autoDeleteAt,
-        is_deleted: false,
       });
 
+      const newMsg = { ...message, sender };
+
       // Notify the sender (acknowledgement with the created message)
-      socket.emit("message:sent", { message });
+      socket.emit("message:sent", { message: newMsg });
 
       // Emit to the chat room (to everyone except sender)
-      socket.to(chatId).emit("message:new", { message });
+      socket.to(chatId).emit("message:new", { message: newMsg });
 
       // Get participants to check who's offline for push notifications
       const participants = await messageService.getChatParticipants(chatId);
+
+      // Notify all participants to update their chat lists
+      participants.forEach((participant) => {
+        if (participant.id !== userId) {
+          // Don't notify the sender
+          // Get socket IDs for this participant
+          const participantSocketIds = getUserSocketIds(participant.id);
+
+          // Emit chat update event to all their connected devices
+          participantSocketIds.forEach((socketId) => {
+            io.to(socketId).emit("chats:update", {
+              chatId,
+              lastMessage: {
+                content: content || "[Media]",
+                sender_id: userId,
+                created_at: new Date(),
+              },
+            });
+          });
+        }
+      });
+
+      // Notify all participants with detailed chat list update
+      for (const participant of participants) {
+        // Get socket IDs for this participant
+        const participantSocketIds = getUserSocketIds(participant.id);
+
+        if (participantSocketIds.length > 0) {
+          try {
+            // Fetch latest chats for this participant
+            const { chats, total } = await ChatService.getUserChats(
+              participant.id,
+              1,
+              20
+            );
+
+            // Emit detailed chats to all their connected devices
+            participantSocketIds.forEach((socketId) => {
+              io.to(socketId).emit("chats:latest", {
+                chats,
+                total,
+                page: 1,
+                totalPages: Math.ceil(total / 20),
+                limit: 20,
+                updatedChatId: chatId, // Include which chat was updated
+              });
+            });
+          } catch (error) {
+            logger.error(
+              `Error fetching chats for user ${participant.id}:`,
+              error
+            );
+          }
+        }
+      }
 
       // Send push notification to offline users
       participants.forEach((participant) => {
@@ -206,6 +242,7 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
         await messageService.updateMessage(messageId, {
           content,
         });
+        console.log("message:edited", originalMessage.chat_id);
 
         // Notify the chat room about the edit
         io.to(originalMessage.chat_id).emit("message:edited", {

@@ -25,7 +25,6 @@ export class MessageController {
       }
 
       // Get the retention policy from the middleware
-      const retentionPolicy = res.locals.messageRetentionPolicy;
       const autoDeleteAt = res.locals.messageAutoDeleteAt;
 
       // Create the message with privacy settings applied
@@ -34,7 +33,6 @@ export class MessageController {
         sender_id: userId,
         content,
         media,
-        retention_policy: retentionPolicy,
       });
 
       res.status(201).json({
@@ -164,7 +162,6 @@ export class MessageController {
       }
 
       // Apply retention policy from middleware
-      const retentionPolicy = res.locals.messageRetentionPolicy;
 
       // Create a new message in the target chat with the original content
       const forwardedMessage = await enhancedMessageService.createMessage({
@@ -172,7 +169,6 @@ export class MessageController {
         sender_id: userId,
         content: originalMessage.content,
         media: originalMessage.media,
-        retention_policy: retentionPolicy,
         // Could add metadata about forwarding
         // forwarded_from: originalMessage.sender_id,
         // original_message_id: messageId

@@ -13,6 +13,7 @@ import {
 import { asyncHandler } from "../utils/asyncHandler";
 import { FriendshipService } from "./friendshipService";
 import { PrivacySettingsService } from "./privacySettingsService";
+import { ChatParticipantDetails } from "@/types/models";
 
 export class ChatService {
   /**
@@ -39,6 +40,7 @@ export class ChatService {
         const participantsWithChatId = participants.map((p) => ({
           ...p,
           chat_id: chat.id,
+          role: "admin",
         }));
 
         const { error: participantsError } = await supabaseAdmin!
@@ -560,6 +562,79 @@ export class ChatService {
       return count || 0;
     },
     "Failed to get participant count"
+  );
+
+  /**
+   * Get detailed participants for a chat
+   */
+  static getChatParticipants = asyncHandler(
+    async (
+      chatId: string,
+      options: {
+        page?: number;
+        limit?: number;
+      } = {}
+    ): Promise<{
+      participants: ChatParticipantDetails[];
+      total: number;
+    }> => {
+      const { page = 1, limit = 20 } = options;
+      const offset = (page - 1) * limit;
+
+      // Fetch participants with user details
+      const { data, error, count } = await supabase
+        .from("chat_participants")
+        .select(
+          `
+            id,
+            chat_id,
+            user_id,
+            role,
+            joined_at,
+            last_read,
+            users!inner (
+              id,
+              username, 
+              first_name, 
+              last_name, 
+              profile_picture,
+              is_verified
+            )
+          `,
+          { count: "exact" }
+        )
+        .eq("chat_id", chatId)
+        .range(offset, offset + limit - 1)
+        .order("joined_at", { ascending: true });
+
+      if (error) {
+        throw new AppError(error.message, 400);
+      }
+
+      // Transform data to match the ChatParticipantDetails interface
+      const participants = data.map((participant: any) => ({
+        id: participant.id,
+        chat_id: participant.chat_id,
+        user_id: participant.user_id,
+        role: participant.role,
+        joined_at: participant.joined_at,
+        last_read: participant.last_read,
+        user: {
+          id: participant.users.id,
+          username: participant.users.username,
+          first_name: participant.users.first_name,
+          last_name: participant.users.last_name,
+          profile_picture: participant.users.profile_picture,
+          is_verified: participant.users.is_verified,
+        },
+      }));
+
+      return {
+        participants,
+        total: count || 0,
+      };
+    },
+    "Failed to get chat participants"
   );
 
   /**

@@ -3,8 +3,12 @@ import { Server as SocketIOServer, Socket } from "socket.io";
 import { logger } from "../utils/logger";
 import { connectionHandler } from "./handlers/connectionHandler";
 import { roomHandler } from "./handlers/roomHandler";
+import { messageHandler } from "./handlers/messageHandler"; // Import message handler if not already imported
+import { chatHandler } from "./handlers/chatHandler"; // Import the new chat handler
 import { socketAuthMiddleware } from "./middleware/authenticate";
 import { rateLimiterMiddleware } from "./middleware/rateLimiter";
+import { readReceiptHandler } from "./handlers/readReceiptHandler";
+import { SocketChatPrivacyMiddleware } from "./middleware/chatPrivacyMiddleware";
 
 // Socket.IO server instance
 let io: SocketIOServer | null = null;
@@ -42,6 +46,7 @@ export function initializeSocketIO(httpServer: HttpServer): SocketIOServer {
   // Apply global middleware
   socketServer.use(socketAuthMiddleware);
   socketServer.use(rateLimiterMiddleware);
+  socketServer.use(SocketChatPrivacyMiddleware.canAddParticipantsMiddleware);
 
   // Set up connection event
   socketServer.on("connection", (socket: Socket) => {
@@ -52,6 +57,13 @@ export function initializeSocketIO(httpServer: HttpServer): SocketIOServer {
 
     // Apply room handler
     roomHandler(socketServer, socket);
+
+    // Apply message handler (if not already added)
+    messageHandler(socketServer, socket);
+    readReceiptHandler(socketServer, socket);
+
+    // Apply the new chat handler
+    chatHandler(socketServer, socket);
   });
 
   logger.info("Socket.IO server initialized");

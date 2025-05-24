@@ -1,12 +1,16 @@
 import { Server as SocketIOServer, Socket } from "socket.io";
 import { logger } from "../../utils/logger";
 
-// Store for active connections (Using Map for O(1) lookups)
+// Store for active connections and user statuses
 const activeConnections = new Map<string, Set<string>>();
+const userStatuses = new Map<
+  string,
+  {
+    status: "online" | "offline" | "away";
+    lastActive: Date;
+  }
+>();
 
-/**
- * Handle socket connection events
- */
 export function connectionHandler(io: SocketIOServer, socket: Socket): void {
   const userId = socket.data.user?.id;
 
@@ -19,10 +23,49 @@ export function connectionHandler(io: SocketIOServer, socket: Socket): void {
   // Add to active connections
   addConnection(userId, socket.id);
 
-  // Broadcast user online status
-  socket.broadcast.emit("user:online", { userId });
+  // Set initial status
+  userStatuses.set(userId, {
+    status: "online",
+    lastActive: new Date(),
+  });
 
-  // Handle disconnect
+  // Broadcast user online status
+  socket.broadcast.emit("user:online", {
+    userId,
+    lastActive: new Date().toISOString(),
+  });
+
+  // Handle status requests
+  socket.on("user:getStatus", (data: { targetUserId: string }) => {
+    const status = userStatuses.get(data.targetUserId) || {
+      status: "offline",
+      lastActive: new Date(),
+    };
+
+    socket.emit("user:statusInfo", {
+      userId: data.targetUserId,
+      status: status.status,
+      lastActive: status.lastActive.toISOString(),
+    });
+  });
+
+  // Handle user status updates
+  socket.on(
+    "user:setStatus",
+    (data: { status: "online" | "offline" | "away" }) => {
+      userStatuses.set(userId, {
+        status: data.status,
+        lastActive: new Date(),
+      });
+
+      socket.broadcast.emit("user:status", {
+        userId,
+        status: data.status,
+        lastActive: new Date().toISOString(),
+      });
+    }
+  );
+
   socket.on("disconnect", () => {
     logger.info(`Socket disconnected: ${socket.id} (User: ${userId})`);
 
@@ -32,28 +75,26 @@ export function connectionHandler(io: SocketIOServer, socket: Socket): void {
     // Check if user has any remaining connections
     const userConnections = activeConnections.get(userId);
     if (!userConnections || userConnections.size === 0) {
+      // Update status to offline
+      userStatuses.set(userId, {
+        status: "offline",
+        lastActive: new Date(),
+      });
+
       // Broadcast user offline status if no connections remain
-      socket.broadcast.emit("user:offline", { userId });
+      socket.broadcast.emit("user:offline", {
+        userId,
+        lastActive: new Date().toISOString(),
+      });
     }
-  });
-
-  // Handle user status updates
-  socket.on(
-    "user:setStatus",
-    (data: { status: "online" | "offline" | "away" }) => {
-      socket.broadcast.emit("user:status", { userId, status: data.status });
-    }
-  );
-
-  // Handle typing status
-  socket.on("user:typing", (data: { chatId: string; isTyping: boolean }) => {
-    socket.to(data.chatId).emit("user:typing", {
-      userId,
-      chatId: data.chatId,
-      isTyping: data.isTyping,
-    });
   });
 }
+
+// Helper to check if user has other active connections
+// function hasOtherConnections(userId: string): boolean {
+//   const connections = activeConnections.get(userId);
+//   return !!connections && connections.size > 0;
+// }
 
 /**
  * Add a connection to the active connections map
