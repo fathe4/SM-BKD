@@ -9,6 +9,11 @@ import {
   TargetType,
 } from "../models/interaction.model";
 import { UUID } from "crypto"; // Add this import
+import { PostService } from "./postService";
+import { CommentService } from "./commentService";
+import { NotificationService } from "./notificationService";
+import { ReferenceType } from "../models/notification.model";
+import { logger } from "../utils/logger";
 
 export interface ReactionSummary {
   like: number;
@@ -60,6 +65,47 @@ export class ReactionService {
 
       if (error) {
         throw new AppError(error.message, 400);
+      }
+
+      // Get the target (post or comment) to notify its owner
+      let targetOwnerId: string;
+      if (reactionData.target_type === TargetType.POST) {
+        const post = await PostService.getPostById(
+          reactionData.target_id.toString()
+        );
+        targetOwnerId = post?.user_id ?? "";
+      } else {
+        const comment = await CommentService.getCommentById(
+          reactionData.target_id.toString()
+        );
+        targetOwnerId = comment?.user_id ?? "";
+      }
+
+      // Create notification if it's not the user's own content
+      if (targetOwnerId !== reactionData.user_id) {
+        try {
+          // Get actor's full name
+          const { data: actor } = await supabase
+            .from("users")
+            .select("first_name, last_name")
+            .eq("id", reactionData.user_id)
+            .single();
+
+          const fullName = actor
+            ? `${actor.first_name} ${actor.last_name}`
+            : "Someone";
+
+          await NotificationService.createNotification({
+            user_id: targetOwnerId as UUID,
+            actor_id: reactionData.user_id,
+            reference_id: data.id,
+            reference_type: ReferenceType.REACTION,
+            content: `${fullName} reacted to your ${reactionData.target_type.toLowerCase()}`,
+          });
+        } catch (error) {
+          logger.error("Failed to create reaction notification:", error);
+          // Don't throw error, just log it
+        }
       }
 
       return data as Reaction;

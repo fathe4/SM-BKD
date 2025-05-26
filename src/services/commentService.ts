@@ -10,6 +10,9 @@ import {
 } from "../models/interaction.model";
 import { PostService } from "./postService";
 import { StorageService } from "./storageService";
+import { NotificationService } from "./notificationService";
+import { ReferenceType } from "../models/notification.model";
+import { logger } from "../utils/logger";
 
 /**
  * Service class for comment-related operations
@@ -115,6 +118,21 @@ export class CommentService {
 
       if (error) {
         throw new AppError(error.message, 400);
+      }
+
+      // Create notification for post owner if it's not their own comment
+      if (post.user_id !== commentData.user_id) {
+        try {
+          await NotificationService.createNotification({
+            user_id: post.user_id,
+            actor_id: commentData.user_id,
+            reference_id: data.id,
+            reference_type: ReferenceType.COMMENT,
+            content: `${commentData.user_id} commented on your post`,
+          });
+        } catch (error) {
+          logger.error("Failed to create comment notification:", error);
+        }
       }
 
       return data as Comment;

@@ -191,8 +191,12 @@ export class PostController {
    */
   static getFeed = controllerHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const page = req.query.page ? parseInt(req.query.page as string) : 1;
-    const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
+    const page = req.query.page
+      ? Math.max(1, parseInt(req.query.page as string))
+      : 1;
+    const limit = req.query.limit
+      ? Math.min(50, Math.max(1, parseInt(req.query.limit as string)))
+      : 10;
 
     const { posts, total } = await PostService.getFeedPosts(
       userId,

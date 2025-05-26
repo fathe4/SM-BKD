@@ -74,7 +74,9 @@ export class PostService {
       // First get the post
       const { data: post, error } = await supabase
         .from("posts")
-        .select("*, post_media(*)")
+        .select(
+          "*, post_media(*), users!inner(id, username, first_name, last_name, profile_picture)"
+        )
         .eq("id", postId)
         .eq("is_deleted", false)
         .single();
@@ -198,6 +200,17 @@ export class PostService {
       page = 1,
       limit = 10
     ): Promise<{ posts: Post[]; total: number }> => {
+      // Validate pagination parameters
+      if (page < 1) {
+        throw new AppError("Page number must be greater than 0", 400);
+      }
+      if (limit < 1) {
+        throw new AppError("Limit must be greater than 0", 400);
+      }
+      if (limit > 50) {
+        throw new AppError("Limit cannot exceed 50 posts per page", 400);
+      }
+
       const offset = (page - 1) * limit;
 
       // Get user's friends
@@ -216,52 +229,12 @@ export class PostService {
         f.requester_id === userId ? f.addressee_id : f.requester_id
       );
 
-      // Build feed query
-      let query = supabase
-        .from("posts")
-        .select(
-          "*, post_media(*), users!inner(username, first_name, last_name, profile_picture)",
-          {
-            count: "exact",
-          }
-        )
-        .eq("is_deleted", false)
-        .eq("visibility", PostVisibility.PUBLIC); // Default to only public posts
-
-      if (friendIds.length > 0) {
-        // Include posts from user and their friends
-        query = query.or(
-          `user_id.eq.${userId},and(user_id.in.(${friendIds.join(
-            ","
-          )}),or(visibility.eq.public,visibility.eq.friends))`
-        );
-      } else {
-        // For users without friends, show:
-        // 1. Their own posts (any visibility)
-        // 2. Popular public posts from others
-        query = query.or(
-          `user_id.eq.${userId},and(user_id.neq.${userId},is_boosted.eq.true)`
-        );
-      }
-
-      // Add ordering and pagination
-      query = query
-        .order("created_at", { ascending: false })
-        .range(offset, offset + limit - 1);
-
-      // Execute query
-      const { data, error, count } = await query;
-
-      if (error) {
-        throw new AppError(error.message, 400);
-      }
-
-      // If we still got no posts, fall back to most recent public posts
-      if (data.length === 0) {
+      // If user has no friends, show default posts
+      if (friendIds.length === 0) {
         const {
-          data: popularPosts,
-          error: popularError,
-          count: popularCount,
+          data: defaultPosts,
+          error: defaultError,
+          count: defaultCount,
         } = await supabase
           .from("posts")
           .select(
@@ -273,17 +246,48 @@ export class PostService {
           .eq("is_deleted", false)
           .eq("visibility", PostVisibility.PUBLIC)
           .neq("user_id", userId) // Not the current user's posts
-          .order("view_count", { ascending: false }) // Order by popularity
-          .limit(limit);
+          .order("created_at", { ascending: false })
+          .range(offset, offset + limit - 1);
 
-        if (popularError) {
-          throw new AppError(popularError.message, 400);
+        if (defaultError) {
+          throw new AppError(defaultError.message, 400);
         }
 
         return {
-          posts: popularPosts as unknown as Post[],
-          total: popularCount || 0,
+          posts: defaultPosts as unknown as Post[],
+          total: defaultCount || 0,
         };
+      }
+
+      // Build feed query for users with friends
+      let query = supabase
+        .from("posts")
+        .select(
+          "*, post_media(*), users!inner(username, first_name, last_name, profile_picture)",
+          {
+            count: "exact",
+          }
+        )
+        .eq("is_deleted", false)
+        .eq("visibility", PostVisibility.PUBLIC);
+
+      // Include posts from user and their friends
+      query = query.or(
+        `user_id.eq.${userId},and(user_id.in.(${friendIds.join(
+          ","
+        )}),or(visibility.eq.public,visibility.eq.friends))`
+      );
+
+      // Add ordering and pagination
+      query = query
+        .order("created_at", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      // Execute query
+      const { data, error, count } = await query;
+
+      if (error) {
+        throw new AppError(error.message, 400);
       }
 
       return {
