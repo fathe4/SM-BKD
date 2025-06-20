@@ -661,6 +661,49 @@ export class ChatService {
     },
     "Failed to check removal permission"
   );
+
+  static async findGroupChatByNameAndParticipants(
+    name: string,
+    participants: string[]
+  ) {
+    // 1. Find all group chats with the given name
+    const { data: chats, error } = await supabase
+      .from("chats")
+      .select("id")
+      .eq("is_group_chat", true)
+      .eq("name", name);
+
+    if (error) throw new AppError(error.message, 400);
+
+    // 2. For each chat, fetch its participants and compare
+    for (const chat of chats) {
+      const { data: chatParticipants, error: participantsError } =
+        await supabase
+          .from("chat_participants")
+          .select("user_id")
+          .eq("chat_id", chat.id);
+
+      if (participantsError) throw new AppError(participantsError.message, 400);
+
+      const chatParticipantIds = chatParticipants.map((p: any) => p.user_id);
+      // Compare as sets (order-insensitive)
+      if (
+        chatParticipantIds.length === participants.length &&
+        chatParticipantIds.every((id: string) => participants.includes(id)) &&
+        participants.every((id: string) => chatParticipantIds.includes(id))
+      ) {
+        // Return the full chat object (fetch from chats table)
+        const { data: fullChat, error: fullChatError } = await supabase
+          .from("chats")
+          .select("*")
+          .eq("id", chat.id)
+          .single();
+        if (fullChatError) throw new AppError(fullChatError.message, 400);
+        return fullChat;
+      }
+    }
+    return null;
+  }
 }
 
 /**

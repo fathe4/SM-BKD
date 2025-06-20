@@ -40,6 +40,12 @@ export const validateCreateChat = [
     .isUUID()
     .withMessage("Each participant ID must be a valid UUID"),
 
+  body("first_message")
+    .optional()
+    .isString()
+    .isLength({ min: 1, max: 2000 })
+    .withMessage("First message must be a string"),
+
   validateRequest,
 ];
 

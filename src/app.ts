@@ -23,6 +23,7 @@ import messageRoutes from "./routes/messageRoutes";
 import chatRoutes from "./routes/chatRoutes";
 import photoRoutes from "./routes/photoRoutes";
 import notificationRoutes from "./routes/notificationRoutes";
+import marketplaceRoutes from "./routes/marketplaceRoutes";
 
 import { setupMessageRetentionJob } from "./jobs/messageRetentionJob";
 
@@ -95,6 +96,7 @@ app.use(`${apiPrefix}/messages`, messageRoutes);
 app.use(`${apiPrefix}/chats`, chatRoutes);
 app.use(`${apiPrefix}/photos`, photoRoutes);
 app.use(`${apiPrefix}/notifications`, notificationRoutes);
+app.use(`${apiPrefix}/marketplace`, marketplaceRoutes);
 
 // Other routes will be added here as they are implemented
 // app.use(`${apiPrefix}/users`, userRoutes);

@@ -4,6 +4,7 @@ import { ChatService } from "../services/chatService";
 import { UUID } from "crypto";
 import { MemberRole } from "../models/group-page.model";
 import { AppError } from "../middlewares/errorHandler";
+import { enhancedMessageService } from "../services/enhancedMessageService";
 
 export class ChatController {
   /**
@@ -12,7 +13,27 @@ export class ChatController {
    */
   static createChat = controllerHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id as UUID;
-    const { is_group_chat, name, description, avatar, participants } = req.body;
+    const {
+      is_group_chat,
+      name,
+      description,
+      avatar,
+      participants,
+      first_message,
+      media,
+    } = req.body;
+    console.log("errror 1");
+    console.log("errror 1");
+    console.log("errror 1");
+    console.log("errror 1");
+    // 1. Check for duplicate group chat
+    const existingChat = await ChatService.findGroupChatByNameAndParticipants(
+      name,
+      participants
+    );
+    if (existingChat) {
+      return res.status(200).json({ chat: existingChat, duplicate: true });
+    }
 
     // Create chat data
     const chatData = {
@@ -36,8 +57,22 @@ export class ChatController {
       })),
     ];
 
-    // Create the chat
+    // 2. Create the chat
     const chat = await ChatService.createChat(chatData, participantsData);
+
+    // 3. If first_message is present, create the first message
+    if (first_message) {
+      await enhancedMessageService.createMessage({
+        chat_id: chat.id as UUID,
+        sender_id: userId,
+        content: first_message,
+        media,
+      });
+    }
+    console.log("errror 22222");
+    console.log("errror 22222");
+    console.log("errror 22222");
+    console.log("errror 22222");
 
     // Get chat summary
     const chatSummary = await ChatService.getChatSummary(chat.id, userId);
@@ -46,6 +81,7 @@ export class ChatController {
       status: "success",
       data: {
         chat: chatSummary,
+        duplicate: false,
       },
     });
   });

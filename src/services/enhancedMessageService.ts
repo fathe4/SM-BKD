@@ -223,7 +223,7 @@ export class EnhancedMessageService {
         is_read: false,
       }));
 
-      console.log(modifiedData, "modifiedData");
+      console.log(data, "modifiedData");
 
       // Process read statuses in the background (non-blocking)
       if (unreadMessages.length > 0) {
