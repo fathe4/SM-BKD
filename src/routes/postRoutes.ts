@@ -112,4 +112,11 @@ router.patch(
 
 router.delete("/:postId/reactions", ReactionController.deleteReaction);
 
+// Boost routes
+router.post("/:postId/boosts", PostController.createPostBoost);
+router.get("/boosts/my", PostController.getUserBoosts);
+router.get("/:postId/boosts/status", PostController.getPostBoostStatus);
+router.patch("/boosts/:boostId/status", PostController.updateBoostStatus);
+router.patch("/boosts/:boostId/activate", PostController.activateBoost);
+
 export default router;

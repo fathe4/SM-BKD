@@ -2,6 +2,8 @@ import { UUID } from "crypto";
 
 export enum BoostStatus {
   ACTIVE = "active",
+  PAUSE = "pause",
+  PENDING_PAYMENT = "pending_payment",
   EXPIRED = "expired",
   CANCELLED = "cancelled",
 }
@@ -16,6 +18,9 @@ export interface PostBoost {
   status: BoostStatus;
   created_at: Date;
   expires_at: Date;
+  city: string;
+  country: string;
+  coordinates: { lat: number; lng: number };
 }
 
 export interface PostBoostCreate

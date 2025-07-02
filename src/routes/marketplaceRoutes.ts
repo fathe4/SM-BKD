@@ -2,6 +2,7 @@ import { authenticate } from "./../middlewares/authenticate";
 import { Router } from "express";
 import { validateCreateListing } from "../middlewares/validators/marketplaceValidator";
 import * as marketplaceController from "../controllers/marketplaceController";
+import { checkActiveSubscription } from "../middlewares/checkActiveSubscription";
 
 const router = Router();
 
@@ -19,6 +20,7 @@ router.post(
   "/",
   authenticate,
   validateCreateListing,
+  checkActiveSubscription,
   marketplaceController.createListing
 );
 
@@ -26,7 +28,12 @@ router.post(
  * @route GET /api/marketplace/mine
  * @desc Get all listings for the current user
  */
-router.get("/mine", authenticate, marketplaceController.getMyListings);
+router.get(
+  "/mine",
+  authenticate,
+  checkActiveSubscription,
+  marketplaceController.getMyListings
+);
 
 /**
  * @route GET /api/marketplace/categories
@@ -44,7 +51,12 @@ router.get("/:id", marketplaceController.getListingById);
  * @route PUT /api/marketplace/:id
  * @desc Update a marketplace listing
  */
-router.put("/:id", authenticate, marketplaceController.updateListing);
+router.put(
+  "/:id",
+  authenticate,
+  validateCreateListing,
+  marketplaceController.updateListing
+);
 
 /**
  * @route DELETE /api/marketplace/:id

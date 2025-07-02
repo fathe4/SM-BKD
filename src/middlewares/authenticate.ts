@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import { config } from "dotenv";
 import { logger } from "../utils/logger";
 import { UserService } from "../services/userService";
-import { UserRole } from "../types/models";
+import { User, UserRole } from "../types/models";
 
 config();
 
@@ -14,11 +14,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret_key_here";
 declare global {
   namespace Express {
     interface Request {
-      user?: {
-        id: string;
-        email: string;
-        role: UserRole;
-      };
+      user?: User;
     }
   }
 }
@@ -35,6 +31,7 @@ export const authenticate = async (
   try {
     // Get token from Authorization header
     const authHeader = req.headers.authorization;
+    console.log(authHeader, "authHeader");
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({
@@ -70,11 +67,7 @@ export const authenticate = async (
     }
 
     // Attach user to request object
-    req.user = {
-      id: decoded.id,
-      email: decoded.email,
-      role: decoded.role,
-    };
+    req.user = user;
 
     next();
   } catch (error) {

@@ -24,7 +24,9 @@ import chatRoutes from "./routes/chatRoutes";
 import photoRoutes from "./routes/photoRoutes";
 import notificationRoutes from "./routes/notificationRoutes";
 import marketplaceRoutes from "./routes/marketplaceRoutes";
-
+import storyRoutes from "./routes/story.routes";
+import paymentRoutes from "./routes/payment.route";
+import subscriptionRoutes from "./routes/subscription.routes";
 import { setupMessageRetentionJob } from "./jobs/messageRetentionJob";
 
 // Load environment variables
@@ -63,6 +65,7 @@ const corsOptions = {
 
 // Apply middlewares
 app.use(cors(corsOptions)); // Enable CORS for all routes
+app.use(`${apiPrefix}/payments`, paymentRoutes);
 app.use(express.json()); // Parse JSON request bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded request bodies
 app.use(morgan("dev", { stream: morganStream })); // Request logging
@@ -97,11 +100,8 @@ app.use(`${apiPrefix}/chats`, chatRoutes);
 app.use(`${apiPrefix}/photos`, photoRoutes);
 app.use(`${apiPrefix}/notifications`, notificationRoutes);
 app.use(`${apiPrefix}/marketplace`, marketplaceRoutes);
-
-// Other routes will be added here as they are implemented
-// app.use(`${apiPrefix}/users`, userRoutes);
-// app.use(`${apiPrefix}/posts`, postRoutes);
-// etc.
+app.use(`${apiPrefix}/stories`, storyRoutes);
+app.use(`${apiPrefix}/subscriptions`, subscriptionRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {

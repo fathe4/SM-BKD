@@ -13,6 +13,7 @@ import { FriendshipStatus } from "../models/friendship.model";
 import { asyncHandler } from "../utils/asyncHandler";
 import { StorageService } from "./storageService";
 import { logger } from "../utils/logger";
+import { PostBoost, PostBoostCreate, BoostStatus } from "../models/boost.model";
 
 /**
  * Service class for post-related operations
@@ -597,5 +598,172 @@ export class PostService {
       };
     },
     "Failed to get my posts"
+  );
+
+  /**
+   * Create a new post boost (status: pending_payment)
+   */
+  static createPostBoost = asyncHandler(
+    async (
+      userId: string,
+      postId: string,
+      boostData: Omit<PostBoostCreate, "user_id" | "post_id" | "amount">
+    ): Promise<PostBoost> => {
+      // Check for existing active or pending boost for this post
+      const { data: existing, error: existingError } = await supabase
+        .from("post_boosts")
+        .select("id, status")
+        .eq("post_id", postId)
+        .in("status", [
+          BoostStatus.ACTIVE,
+          BoostStatus.PAUSE,
+          BoostStatus.PENDING_PAYMENT,
+        ])
+        .maybeSingle();
+      if (existing && !existingError) {
+        throw new AppError(
+          "A boost is already active or pending for this post.",
+          400
+        );
+      }
+
+      // Fetch the correct pricing tier for the requested days
+      const { data: pricing, error: pricingError } = await supabase
+        .from("boost_pricing")
+        .select("*")
+        .lte("min_days", boostData.days)
+        .or(`max_days.gte.${boostData.days},max_days.is.null`)
+        .eq("is_active", true)
+        .order("min_days", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (pricingError || !pricing) {
+        throw new AppError(
+          "No valid boost pricing tier found for the requested duration.",
+          400
+        );
+      }
+
+      // Calculate the amount
+      const rawPrice = pricing.base_price_per_day * boostData.days;
+      const discount = pricing.discount_percent || 0;
+      const amount = +(rawPrice * (1 - discount / 100)).toFixed(2);
+
+      const now = new Date();
+      const expiresAt = new Date(
+        now.getTime() + boostData.days * 24 * 60 * 60 * 1000
+      );
+      console.log(boostData, "boostData");
+
+      const { data, error } = await supabaseAdmin!
+        .from("post_boosts")
+        .insert({
+          ...boostData,
+          user_id: userId,
+          post_id: postId,
+          amount,
+          status: BoostStatus.PENDING_PAYMENT,
+          created_at: now.toISOString(),
+          expires_at: expiresAt.toISOString(),
+        })
+        .select()
+        .single();
+
+      if (error) throw new AppError(error.message, 400);
+      return data as PostBoost;
+    },
+    "Failed to create post boost"
+  );
+
+  /**
+   * List all boosts for a user (optionally filter by status)
+   */
+  static getUserBoosts = asyncHandler(
+    async (userId: string, status?: BoostStatus): Promise<PostBoost[]> => {
+      let query = supabase
+        .from("post_boosts")
+        .select("*")
+        .eq("user_id", userId);
+      if (status) query = query.eq("status", status);
+      const { data, error } = await query;
+      if (error) throw new AppError(error.message, 400);
+      return data as PostBoost[];
+    },
+    "Failed to get user boosts"
+  );
+
+  /**
+   * Get boost status for a post
+   */
+  static getPostBoostStatus = asyncHandler(
+    async (postId: string): Promise<PostBoost | null> => {
+      const { data, error } = await supabase
+        .from("post_boosts")
+        .select("*")
+        .eq("post_id", postId)
+        .in("status", [
+          BoostStatus.ACTIVE,
+          BoostStatus.PAUSE,
+          BoostStatus.PENDING_PAYMENT,
+        ])
+        .maybeSingle();
+      if (error) throw new AppError(error.message, 400);
+      return (data as PostBoost) || null;
+    },
+    "Failed to get post boost status"
+  );
+
+  /**
+   * Update the status of a boost (handles all status changes)
+   */
+  static updateBoostStatus = asyncHandler(
+    async (boostId: string, status: BoostStatus): Promise<void> => {
+      // For statuses other than ACTIVE
+      if (status === BoostStatus.ACTIVE) {
+        throw new AppError("Use activateBoost for activation logic.", 400);
+      }
+      const { error } = await supabaseAdmin!
+        .from("post_boosts")
+        .update({ status })
+        .eq("id", boostId);
+      if (error) throw new AppError(error.message, 400);
+    },
+    "Failed to update boost status"
+  );
+
+  static activateBoost = asyncHandler(
+    async (boostId: string): Promise<void> => {
+      // Fetch the boost to get post_id and days if needed
+      const { data: boost, error: fetchError } = await supabase
+        .from("post_boosts")
+        .select("id, post_id, days")
+        .eq("id", boostId)
+        .single();
+      if (fetchError || !boost) throw new AppError("Boost not found", 404);
+
+      const now = new Date();
+      const expiresAt = new Date(
+        now.getTime() + boost.days * 24 * 60 * 60 * 1000
+      );
+      // Expire all other boosts for this post
+      await supabaseAdmin!
+        .from("post_boosts")
+        .update({ status: BoostStatus.EXPIRED })
+        .eq("post_id", boost.post_id)
+        .neq("id", boostId)
+        .in("status", [BoostStatus.ACTIVE, BoostStatus.PAUSE]);
+      // Activate this boost
+      const { error } = await supabaseAdmin!
+        .from("post_boosts")
+        .update({
+          status: BoostStatus.ACTIVE,
+          created_at: now.toISOString(),
+          expires_at: expiresAt.toISOString(),
+        })
+        .eq("id", boostId);
+      if (error) throw new AppError(error.message, 400);
+    },
+    "Failed to activate boost"
   );
 }

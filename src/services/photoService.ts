@@ -28,7 +28,7 @@ interface PhotoWithPost {
 // Helper functions
 const handleDatabaseError = (error: any, message: string) => {
   if (error) {
-    logger.error(`Database error: ${error.message}`);
+    logger.error(`Database error: ${error.message} ${message}`);
     throw new AppError(error.message, 400);
   }
 };

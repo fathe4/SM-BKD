@@ -9,6 +9,7 @@ import { LocationSource, UserRole } from "../types/models";
 import { config } from "dotenv";
 import { IpLocationService } from "../services/ipLocationService";
 import { ProfileService } from "../services/profileService";
+import { getActiveSubscriptionForUser } from "../services/subscriptionService";
 
 config();
 
@@ -202,6 +203,10 @@ export class AuthController {
       // Remove sensitive information
       const { password_hash, ...userWithoutPassword } = user;
 
+      // Check if user is premium (has active subscription)
+      const subscription = await getActiveSubscriptionForUser(user.id);
+      const isPremium = !!subscription;
+
       res.status(200).json({
         status: "success",
         message: "Logged in successfully",
@@ -209,6 +214,8 @@ export class AuthController {
           user: userWithoutPassword,
           token,
           refreshToken,
+          isPremium,
+          subscription, // optionally include subscription details
         },
       });
     } catch (error) {

@@ -6,6 +6,7 @@ import { controllerHandler } from "../utils/controllerHandler";
 import { AppError } from "../middlewares/errorHandler";
 import { MediaType, PostVisibility } from "../models";
 import { StorageService } from "../services/storageService";
+import { BoostStatus } from "../models/boost.model";
 
 export class PostController {
   /**
@@ -297,5 +298,68 @@ export class PostController {
         limit,
       },
     });
+  });
+
+  /**
+   * Create a new boost for a post
+   * @route POST /api/v1/posts/:postId/boosts
+   */
+  static createPostBoost = async (req: Request, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const postId = req.params.postId;
+      const boostData = req.body;
+      const boost = await PostService.createPostBoost(
+        userId,
+        postId,
+        boostData
+      );
+      res.status(201).json({ status: "success", data: { boost } });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  };
+
+  /**
+   * List all boosts for the authenticated user
+   * @route GET /api/v1/posts/boosts/my
+   */
+  static getUserBoosts = controllerHandler(async (req, res) => {
+    const userId = req.user!.id;
+    const status = req.query.status as BoostStatus | undefined;
+    const boosts = await PostService.getUserBoosts(userId, status);
+    res.status(200).json({ status: "success", data: { boosts } });
+  });
+
+  /**
+   * Get boost status for a post
+   * @route GET /api/v1/posts/:postId/boosts/status
+   */
+  static getPostBoostStatus = controllerHandler(async (req, res) => {
+    const postId = req.params.postId;
+    const boost = await PostService.getPostBoostStatus(postId);
+    res.status(200).json({ status: "success", data: { boost } });
+  });
+
+  /**
+   * Update the status of a boost
+   * @route PATCH /api/v1/posts/boosts/:boostId/status
+   * @body { status: BoostStatus }
+   */
+  static updateBoostStatus = controllerHandler(async (req, res) => {
+    const boostId = req.params.boostId;
+    const { status } = req.body;
+    await PostService.updateBoostStatus(boostId, status);
+    res.status(200).json({ status: "success" });
+  });
+
+  /**
+   * Activate a boost (set status to ACTIVE, expire others)
+   * @route PATCH /api/v1/posts/boosts/:boostId/activate
+   */
+  static activateBoost = controllerHandler(async (req, res) => {
+    const boostId = req.params.boostId;
+    await PostService.activateBoost(boostId);
+    res.status(200).json({ status: "success" });
   });
 }
