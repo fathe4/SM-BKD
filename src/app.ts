@@ -50,13 +50,13 @@ app.use(
   })
 );
 const corsOptions = {
-  origin: "*", // Allow all origins for testing
+  //   origin: "*", // Allow all origins for testing
   // Alternatively, use this more secure approach when ready:
-  // origin: [
-  //   "http://localhost:3000",
-  //   "http://127.0.0.1:3000",
-  //   "https://yourdomain.com" // Add your frontend domain
-  // ],
+  origin: [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    // "https://yourdomain.com" // Add your frontend domain
+  ],
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
   credentials: true,
