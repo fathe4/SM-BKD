@@ -2,7 +2,7 @@ import Stripe from "stripe";
 import { supabase } from "../config/supabase";
 import { Tables, TablesInsert } from "../types/supabase";
 import { PostService } from "./postService";
-import { BoostStatus } from "../models/boost.model";
+import { PaymentReferenceType } from "../models/marketplace.model";
 
 // Initialize the Stripe client with your secret key.
 // It's crucial to keep this key secure and use environment variables.
@@ -101,7 +101,7 @@ export async function createSubscriptionCheckoutSession(
     currency: "usd", // Assuming USD, this could be dynamic in the future.
     status: "pending",
     reference_id: tierId,
-    reference_type: "subscription",
+    reference_type: PaymentReferenceType.SUBSCRIPTION,
     payment_method: "stripe",
   };
 
@@ -151,7 +151,7 @@ export async function createPostBoostCheckoutSession(
     currency: "usd", // Assuming USD
     status: "pending",
     reference_id: boostId,
-    reference_type: "post_boost",
+    reference_type: PaymentReferenceType.BOOST,
     payment_method: "stripe",
   };
 
@@ -255,7 +255,7 @@ export const handleStripeWebhook = async (body: Buffer, signature: string) => {
 
     // Handle subscription creation
     if (
-      payment.reference_type === "subscription" &&
+      payment.reference_type === PaymentReferenceType.SUBSCRIPTION &&
       payment.user_id &&
       payment.reference_id
     ) {
@@ -299,12 +299,15 @@ export const handleStripeWebhook = async (body: Buffer, signature: string) => {
           `Failed to create user subscription: ${subError.message}`
         );
       }
-    } else if (payment.reference_type === "post_boost") {
-      // Activate the boost after successful payment
-      await PostService.updateBoostStatus(
+    } else if (payment.reference_type === PaymentReferenceType.BOOST) {
+      console.log(
+        "payment.reference_id",
         payment.reference_id,
-        BoostStatus.ACTIVE
+        "payment.reference_type",
+        payment.reference_type
       );
+      // Activate the boost after successful payment
+      await PostService.activateBoost(payment.reference_id);
     }
   }
 

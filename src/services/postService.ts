@@ -727,6 +727,9 @@ export class PostService {
         .from("post_boosts")
         .update({ status })
         .eq("id", boostId);
+
+      console.log(error, "error update boost");
+
       if (error) throw new AppError(error.message, 400);
     },
     "Failed to update boost status"
