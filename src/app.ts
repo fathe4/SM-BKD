@@ -42,16 +42,7 @@ const apiPrefix = process.env.API_PREFIX || "/api/v1";
 
 initializeSocketIO(server);
 
-// Apply middlewares
-app.use(
-  helmet({
-    crossOriginResourcePolicy: { policy: "cross-origin" },
-    contentSecurityPolicy: false,
-  })
-);
 const corsOptions = {
-  //   origin: "*", // Allow all origins for testing
-  // Alternatively, use this more secure approach when ready:
   origin: [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -65,6 +56,15 @@ const corsOptions = {
 
 // Apply middlewares
 app.use(cors(corsOptions)); // Enable CORS for all routes
+
+// Apply middlewares
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    contentSecurityPolicy: false,
+  })
+);
+
 app.use(`${apiPrefix}/payments`, paymentRoutes);
 app.use(express.json()); // Parse JSON request bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded request bodies
