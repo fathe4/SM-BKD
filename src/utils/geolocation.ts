@@ -19,7 +19,7 @@ export interface GeoLocationData {
 }
 
 /**
- * Get geolocation data from an IP address using the free ip-api.com service
+ * Get geolocation data from an IP address using the free ipapi.co service
  */
 export const getLocationFromIp = async (
   ip: string
@@ -39,28 +39,28 @@ export const getLocationFromIp = async (
       return null;
     }
 
-    const response = await axios.get(
-      `http://ip-api.com/json/${cleanIp}?fields=status,message,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,query`
-    );
+    const response = await axios.get(`https://ipapi.co/${cleanIp}/json/`);
 
-    if (response.data.status === "success") {
+    if (response.data && !response.data.error) {
       return {
-        ip: response.data.query,
-        country: response.data.country,
-        countryCode: response.data.countryCode,
-        region: response.data.region,
-        regionName: response.data.regionName,
+        ip: response.data.ip,
+        country: response.data.country_name,
+        countryCode: response.data.country_code,
+        region: response.data.region_code,
+        regionName: response.data.region,
         city: response.data.city,
-        zip: response.data.zip,
-        latitude: response.data.lat,
-        longitude: response.data.lon,
+        zip: response.data.postal,
+        latitude: response.data.latitude,
+        longitude: response.data.longitude,
         timezone: response.data.timezone,
-        isp: response.data.isp,
+        isp: response.data.org,
         org: response.data.org,
-        as: response.data.as,
+        as: response.data.asn,
       };
     } else {
-      logger.warn(`Geolocation API error: ${response.data.message}`);
+      logger.warn(
+        `Geolocation API error: ${response.data.error || "Unknown error"}`
+      );
       return null;
     }
   } catch (error) {
@@ -71,24 +71,25 @@ export const getLocationFromIp = async (
 
 /**
  * Rate limiting utility to prevent exceeding the free tier limits
- * ip-api.com allows 45 requests per minute
+ * ipapi.co allows 1,000 requests per day for free tier
  */
 let requestCount = 0;
 let lastResetTime = Date.now();
-const MAX_REQUESTS_PER_MINUTE = 45;
+const MAX_REQUESTS_PER_DAY = 1000;
 
 export const throttledGetLocationFromIp = async (
   ip: string
 ): Promise<GeoLocationData | null> => {
-  // Reset counter if a minute has passed
+  // Reset counter if a day has passed
   const now = Date.now();
-  if (now - lastResetTime > 60000) {
+  if (now - lastResetTime > 24 * 60 * 60 * 1000) {
+    // 24 hours in milliseconds
     requestCount = 0;
     lastResetTime = now;
   }
 
   // Check if we've exceeded the rate limit
-  if (requestCount >= MAX_REQUESTS_PER_MINUTE) {
+  if (requestCount >= MAX_REQUESTS_PER_DAY) {
     logger.warn("Rate limit exceeded for IP geolocation API");
     return null;
   }

@@ -45,6 +45,7 @@ initializeSocketIO(server);
 const corsOptions = {
   origin: [
     "http://localhost:3000",
+    "https://dambala.ca",
     // "https://yourdomain.com" // Add your frontend domain
   ],
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
