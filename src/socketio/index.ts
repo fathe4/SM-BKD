@@ -23,6 +23,7 @@ export function initializeSocketIO(httpServer: HttpServer): SocketIOServer {
 
   // Create Socket.IO server with security settings
   io = new SocketIOServer(httpServer, {
+    path: "/socket.io",
     cors: {
       origin: process.env.CLIENT_URL || "*",
       methods: ["GET", "POST"],
