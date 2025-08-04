@@ -143,6 +143,7 @@ export class AuthController {
       const { email, password, locationData } = req.body;
 
       console.log(locationData, "locationData");
+      console.log(email, password, "locationData");
 
       // Find user by email
       const user = await UserService.findUserByEmail(email);
@@ -161,7 +162,7 @@ export class AuthController {
         user.password_hash
       );
       if (!isPasswordValid) {
-        throw new AppError("Invalid credentials", 401);
+        throw new AppError("Invalid Password", 401);
       }
 
       // Generate JWT token
