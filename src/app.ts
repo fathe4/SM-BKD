@@ -115,15 +115,15 @@ app.use(errorHandler);
 
 // Start server if not in test mode
 // if (process.env.NODE_ENV !== "development") {
-app.listen(port, () => {
-  logger.info(
-    `Server running on port ${port} in ${
-      process.env.NODE_ENV || "development"
-    } mode`
-  );
-  logger.info(`API accessible at http://localhost:${port}${apiPrefix}`);
-});
-// }
+// app.listen(port, () => {
+//   logger.info(
+//     `Server running on port ${port} in ${
+//       process.env.NODE_ENV || "development"
+//     } mode`
+//   );
+//   logger.info(`API accessible at http://localhost:${port}${apiPrefix}`);
+// });
+// // }
 
 app.use((req, _res, next) => {
   if (Object.keys(req.headers).length === 0) {
