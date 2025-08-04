@@ -2,55 +2,9 @@
 import { UserService } from "./userService";
 import { LocationSource } from "../types/models";
 import { logger } from "../utils/logger";
-import { throttledGetLocationFromIp } from "../utils/geolocation";
+// import { throttledGetLocationFromIp } from "../utils/geolocation";
 
 export class IpLocationService {
-  /**
-   * Track user location based on IP address
-   */
-  static async trackUserIpLocation(
-    userId: string,
-    ipAddress: string,
-    deviceId: string
-  ): Promise<void> {
-    try {
-      // Get geolocation data from IP
-      const geoData = await throttledGetLocationFromIp(ipAddress);
-
-      if (!geoData) {
-        logger.info(`Skipping location tracking for IP: ${ipAddress}`);
-        return;
-      }
-
-      // Store location in database
-      await UserService.trackUserLocation({
-        user_id: userId,
-        device_id: deviceId,
-        coordinates: [geoData.longitude, geoData.latitude], // Note: PostGIS uses [long, lat]
-        city: geoData.city,
-        country: geoData.country,
-        ip_address: ipAddress,
-        is_active: true,
-        location_source: LocationSource.IP,
-        additional_metadata: {
-          region: geoData.regionName,
-          postal_code: geoData.zip,
-          timezone: geoData.timezone,
-          isp: geoData.isp,
-          organization: geoData.org,
-        },
-        updated_at: "",
-      });
-
-      logger.info(
-        `Successfully tracked location for user ${userId} from IP ${ipAddress}`
-      );
-    } catch (error) {
-      // Don't let location tracking failure break the authentication flow
-      logger.error(`Error tracking location for user ${userId}:`, error);
-    }
-  }
-
   /**
    * Handle user login location tracking
    * This method should be called during login
@@ -59,7 +13,8 @@ export class IpLocationService {
     userId: string,
     ipAddress: string,
     deviceToken: string,
-    deviceType: string
+    deviceType: string,
+    locationData: any
   ): Promise<void> {
     try {
       // Register or update the device first
@@ -69,13 +24,105 @@ export class IpLocationService {
         device_type: deviceType,
         ip_address: ipAddress,
         last_active: new Date().toISOString(),
-        updated_at: "",
       });
 
-      // Then track the location
-      await this.trackUserIpLocation(userId, ipAddress, device.id);
+      if (locationData.coordinates) {
+        await UserService.trackUserLocation({
+          user_id: userId,
+          device_id: device.id,
+          coordinates: [
+            locationData.coordinates.lng,
+            locationData.coordinates.lat,
+          ], // Note: PostGIS uses [long, lat]
+          city: locationData.city || undefined,
+          country: locationData.country || undefined,
+          ip_address: locationData.ip_address || undefined,
+          is_active: true,
+          location_source: LocationSource.IP,
+          additional_metadata: {
+            source: locationData.location_source,
+            client_provided: true,
+          },
+        });
+
+        logger.info(
+          `Successfully tracked client-provided location for user ${userId} from ${locationData.location_source}`
+        );
+      }
     } catch (error) {
       logger.error(`Error tracking login location for user ${userId}:`, error);
     }
   }
+
+  /**
+   * Handle user login location tracking with client-provided location data
+   * This method should be called during login when client sends location data
+   */
+  //   static async trackLoginLocationWithData(
+  //     userId: string,
+  //     locationData: LocationData,
+  //     deviceToken?: string,
+  //     deviceType?: string
+  //   ): Promise<void> {
+  //     console.log(locationData, "locationData");
+
+  //     try {
+  //       // Register or update the device first if device info is available
+  //       //   let deviceId: string;
+  //       //   if (deviceToken) {
+  //       //     const device = await UserService.registerUserDevice({
+  //       //       user_id: userId,
+  //       //       device_token: deviceToken,
+  //       //       device_type: deviceType || "unknown",
+  //       //       ip_address: locationData.ip_address || "unknown",
+  //       //       last_active: new Date().toISOString(),
+  //       //     });
+  //       //     deviceId = device.id;
+  //       //   } else {
+  //       //     // Create a default device if no device token is provided
+  //       //     const device = await UserService.registerUserDevice({
+  //       //       user_id: userId,
+  //       //       device_token: `default-${Date.now()}`,
+  //       //       device_type: "unknown",
+  //       //       ip_address: locationData.ip_address || "unknown",
+  //       //       last_active: new Date().toISOString(),
+  //       //     });
+  //       //     deviceId = device.id;
+  //       //   }
+
+  //       // Store location data directly from client
+  //       if (locationData.coordinates) {
+  //         // await UserService.trackUserLocation({
+  //         //   user_id: userId,
+  //         //   //   device_id: deviceId,
+  //         //   coordinates: [
+  //         //     locationData.coordinates.lng,
+  //         //     locationData.coordinates.lat,
+  //         //   ], // Note: PostGIS uses [long, lat]
+  //         //   city: locationData.city || undefined,
+  //         //   country: locationData.country || undefined,
+  //         //   ip_address: locationData.ip_address || undefined,
+  //         //   is_active: true,
+  //         //   location_source: locationData.location_source as LocationSource,
+  //         //   additional_metadata: {
+  //         //     source: locationData.location_source,
+  //         //     client_provided: true,
+  //         //   },
+  //         // });
+
+  //         logger.info(
+  //           `Successfully tracked client-provided location for user ${userId} from ${locationData.location_source}`
+  //         );
+  //       } else {
+  //         logger.info(
+  //           `No coordinates provided for user ${userId}, skipping location tracking`
+  //         );
+  //       }
+  //     } catch (error) {
+  //       logger.error(
+  //         `Error tracking client-provided location for user ${userId}:`,
+  //         error
+  //       );
+  //     }
+  //   }
 }

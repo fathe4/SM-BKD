@@ -34,7 +34,8 @@ export class AuthController {
    */
   static async register(req: Request, res: Response) {
     try {
-      const { email, password, first_name, last_name, username } = req.body;
+      const { email, password, first_name, last_name, username, locationData } =
+        req.body;
 
       // Check if user already exists
       const existingUser = await UserService.findUserByEmail(email);
@@ -98,7 +99,8 @@ export class AuthController {
           newUser.id,
           clientInfo.ipAddress,
           clientInfo.deviceToken,
-          clientInfo.deviceType
+          clientInfo.deviceType,
+          locationData
         ).catch((err) => {
           // Silently log the error but don't disrupt login process
           logger.error("Error tracking location during registration:", err);
@@ -138,7 +140,9 @@ export class AuthController {
    */
   static async login(req: Request, res: Response) {
     try {
-      const { email, password } = req.body;
+      const { email, password, locationData } = req.body;
+
+      console.log(locationData, "locationData");
 
       // Find user by email
       const user = await UserService.findUserByEmail(email);
@@ -194,7 +198,8 @@ export class AuthController {
             user.id,
             clientInfo.ipAddress,
             clientInfo.deviceToken,
-            clientInfo.deviceType
+            clientInfo.deviceType,
+            locationData
           ).catch((err) => {
             logger.error("Error tracking location during login:", err);
           });

@@ -367,7 +367,7 @@ export class UserService {
    * Register a user device
    */
   static async registerUserDevice(
-    deviceData: Omit<UserDevice, "id" | "created_at">
+    deviceData: Omit<UserDevice, "id" | "created_at" | "updated_at">
   ): Promise<UserDevice> {
     try {
       // Check if device already exists
@@ -485,7 +485,7 @@ export class UserService {
    * Track a user's location
    */
   static async trackUserLocation(
-    locationData: Omit<UserLocation, "id" | "created_at">
+    locationData: Omit<UserLocation, "id" | "created_at" | "updated_at">
   ): Promise<UserLocation> {
     try {
       // Format coordinates for PostGIS
