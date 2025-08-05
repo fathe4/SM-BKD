@@ -9,6 +9,7 @@
     "build": "tsc",
     "lint": "eslint . --ext .ts",
     "test": "mocha -r ts-node/register 'tests/**/*.test.ts'",
+    "db:setup": "ts-node src/scripts/setupDatabase.ts",
     "seed": "ts-node src/scripts/seed.ts",
     "migrate:privacy-settings": "ts-node src/scripts/migrations/addUserPrivacySettingsTable.ts"
   },

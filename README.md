@@ -99,18 +99,43 @@ LOG_LEVEL=info
 
 ### 4. Database Setup
 
-Run the database setup script to create required tables and initial data:
+Since this project uses Supabase, you have several options for setting up your database:
+
+#### Option 1: Using npm Scripts (Recommended)
 
 ```bash
 # Setup database schema
 npm run db:setup
 
-# Run migrations (if any)
+# Run existing migrations
 npm run migrate:privacy-settings
 
 # Seed initial data (optional)
 npm run seed
 ```
+
+#### Option 2: Using Supabase Dashboard
+
+1. **Go to your Supabase project dashboard**
+2. **Navigate to the SQL Editor**
+3. **Run the schema** from `src/scripts/db-schema.sql`
+
+#### Option 3: Using the Setup Script Directly
+
+```bash
+# Run the database setup script directly
+npx ts-node src/scripts/setupDatabase.ts
+```
+
+#### Option 4: Using Supabase CLI
+
+```bash
+# If you have Supabase CLI installed
+supabase db reset
+supabase db push
+```
+
+**Note**: Make sure your Supabase environment variables are properly configured before running any database setup commands.
 
 ### 5. Start Development Server
 
