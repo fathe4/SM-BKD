@@ -36,10 +36,11 @@ config();
 const app: Application = express();
 const server = http.createServer(app);
 
+// Use single port for both HTTP and Socket.IO
 const port = process.env.PORT || 5000;
-const socket_port = process.env.socket_port || 7979;
 const apiPrefix = process.env.API_PREFIX || "/api/v1";
 
+// Initialize Socket.IO on the same server
 initializeSocketIO(server);
 
 const corsOptions = {
@@ -114,18 +115,7 @@ app.use((req: Request, res: Response) => {
 // Global error handler
 app.use(errorHandler);
 
-// Start server if not in test mode
-// if (process.env.NODE_ENV !== "development") {
-// app.listen(port, () => {
-//   logger.info(
-//     `Server running on port ${port} in ${
-//       process.env.NODE_ENV || "development"
-//     } mode`
-//   );
-//   logger.info(`API accessible at http://localhost:${port}${apiPrefix}`);
-// });
-// // }
-
+// Header logging middleware
 app.use((req, _res, next) => {
   if (Object.keys(req.headers).length === 0) {
     logger.warn(`⚠️  No headers on ${req.method} ${req.originalUrl}`);
@@ -133,13 +123,19 @@ app.use((req, _res, next) => {
   next();
 });
 
-server.listen(socket_port, () => {
-  logger.info(
-    `Server running on port ${socket_port} in ${
-      process.env.NODE_ENV || "development"
-    } mode`
-  );
-  logger.info(`API accessible at http://localhost:${socket_port}${apiPrefix}`);
-});
+// Start the server ONLY ONCE - using the HTTP server that has Socket.IO attached
+if (process.env.NODE_ENV !== "test") {
+  server.listen(port, () => {
+    logger.info(
+      `🚀 Server running on port ${port} in ${
+        process.env.NODE_ENV || "development"
+      } mode`
+    );
+    logger.info(`📡 API accessible at http://localhost:${port}${apiPrefix}`);
+    logger.info(
+      `🔌 Socket.IO accessible at http://localhost:${port}/socket.io/`
+    );
+  });
+}
 
 export default app;
