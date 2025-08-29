@@ -53,27 +53,59 @@ export async function createPostBoostCheckout(req: Request, res: Response) {
   }
 }
 
-export const handleStripeWebhookController = async (req: Request, res: Response) => {
+export const handleStripeWebhookController = async (
+  req: Request,
+  res: Response
+) => {
   try {
-    console.log("=== WEBHOOK DEBUG ===");
-    console.log("Body constructor:", req.body.constructor.name);
-    console.log("Body toString():", req.body.toString().substring(0, 100));
-    console.log(
-      "Body JSON.stringify():",
-      JSON.stringify(req.body).substring(0, 100)
-    );
-    console.log("Raw body as Buffer:", Buffer.from(JSON.stringify(req.body)));
+    console.log("WEBHOOK");
 
     const sig = req.headers["stripe-signature"] as string;
 
-    // Try different body formats
-    let bodyToUse = req.body;
-    if (typeof req.body === "object" && !Buffer.isBuffer(req.body)) {
-      bodyToUse = Buffer.from(JSON.stringify(req.body));
-      console.log("Converting object to Buffer");
+    // Fix the Buffer issue - get the original raw body
+    let rawBody: Buffer;
+
+    if (Buffer.isBuffer(req.body)) {
+      // Check if this is a serialized Buffer object that needs reconstruction
+      const bodyString = req.body.toString();
+
+      // If it starts with JSON, it means the Buffer was serialized
+      if (
+        bodyString.startsWith("{") &&
+        // eslint-disable-next-line quotes
+        bodyString.includes('"type":"Buffer"')
+      ) {
+        try {
+          const parsedBody = JSON.parse(bodyString);
+          if (parsedBody.type === "Buffer" && Array.isArray(parsedBody.data)) {
+            // Reconstruct the original Buffer from the data array
+            rawBody = Buffer.from(parsedBody.data);
+            console.log(
+              "[StripeWebhook] Reconstructed Buffer from serialized data"
+            );
+          } else {
+            rawBody = req.body;
+          }
+        } catch (e) {
+          rawBody = req.body;
+        }
+      } else {
+        rawBody = req.body;
+      }
+    } else if (typeof req.body === "string") {
+      rawBody = Buffer.from(req.body, "utf8");
+    } else {
+      // If it's an object, stringify it
+      rawBody = Buffer.from(JSON.stringify(req.body), "utf8");
     }
 
-    await paymentService.handleStripeWebhook(bodyToUse, sig);
+    console.log("[DEBUG] Using raw body length:", rawBody.length);
+    console.log(
+      "[DEBUG] Raw body preview:",
+      rawBody.toString().substring(0, 100)
+    );
+
+    await paymentService.handleStripeWebhook(rawBody, sig);
     res.status(200).json({ received: true });
   } catch (error: any) {
     console.error("Webhook controller error:", error.message);
