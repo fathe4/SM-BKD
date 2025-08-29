@@ -15,7 +15,14 @@ const router = Router();
  */
 router.post(
   "/webhook",
-  express.raw({ type: "application/json" }),
+  (req, res, next) => {
+    // Ensure we get the raw body for Stripe webhooks
+    if (req.headers["content-type"] === "application/json") {
+      express.raw({ type: "application/json" })(req, res, next);
+    } else {
+      next();
+    }
+  },
   handleStripeWebhookController
 );
 
