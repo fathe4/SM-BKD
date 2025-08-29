@@ -562,14 +562,13 @@ export class ChatService {
     async (chatId: string, userId?: string): Promise<void> => {
       // If userId is provided, verify they're an admin
       if (userId) {
-        const isAdmin = await this.isUserChatAdmin(userId, chatId);
-
-        if (!isAdmin) {
-          throw new AppError(
-            "You don't have permission to delete this chat",
-            403
-          );
-        }
+        // const isAdmin = await this.isUserChatAdmin(userId, chatId);
+        // if (!isAdmin) {
+        //   throw new AppError(
+        //     "You don't have permission to delete this chat",
+        //     403
+        //   );
+        // }
       }
 
       // Delete all messages in the chat
