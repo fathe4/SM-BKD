@@ -53,21 +53,30 @@ export async function createPostBoostCheckout(req: Request, res: Response) {
   }
 }
 
-export const handleStripeWebhookController = async (
-  req: Request,
-  res: Response
-) => {
+export const handleStripeWebhookController = async (req: Request, res: Response) => {
   try {
-    console.log("[DEBUG] Request headers:", req.headers);
-    console.log("[DEBUG] Content-Type:", req.headers["content-type"]);
-    console.log("[DEBUG] Body type:", typeof req.body);
-    console.log("[DEBUG] Is Buffer:", Buffer.isBuffer(req.body));
-    console.log("[DEBUG] Body length:", req.body?.length);
-    console.log("[DEBUG] Stripe signature:", req.headers["stripe-signature"]);
+    console.log("=== WEBHOOK DEBUG ===");
+    console.log("Body constructor:", req.body.constructor.name);
+    console.log("Body toString():", req.body.toString().substring(0, 100));
+    console.log(
+      "Body JSON.stringify():",
+      JSON.stringify(req.body).substring(0, 100)
+    );
+    console.log("Raw body as Buffer:", Buffer.from(JSON.stringify(req.body)));
+
     const sig = req.headers["stripe-signature"] as string;
-    await paymentService.handleStripeWebhook(req.body, sig);
+
+    // Try different body formats
+    let bodyToUse = req.body;
+    if (typeof req.body === "object" && !Buffer.isBuffer(req.body)) {
+      bodyToUse = Buffer.from(JSON.stringify(req.body));
+      console.log("Converting object to Buffer");
+    }
+
+    await paymentService.handleStripeWebhook(bodyToUse, sig);
     res.status(200).json({ received: true });
   } catch (error: any) {
+    console.error("Webhook controller error:", error.message);
     res.status(400).send(`Webhook Error: ${error.message}`);
   }
 };
