@@ -13,11 +13,11 @@ const router = Router();
  * @desc    Stripe webhook handler
  * @access  Public
  */
-router.post(
-  "/webhook",
-  express.raw({ type: "application/json" }),
-  handleStripeWebhookController
-);
+// router.post(
+//   "/webhook",
+//   express.raw({ type: "application/json" }),
+//   handleStripeWebhookController
+// );
 
 router.use(express.json());
 
