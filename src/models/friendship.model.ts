@@ -33,5 +33,6 @@ export interface FriendSummary {
   bio?: string;
   location?: string;
   friendship_id?: string;
+  chat_id?: string;
   friendship_status?: FriendshipStatus;
 }

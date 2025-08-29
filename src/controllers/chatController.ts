@@ -14,51 +14,29 @@ export class ChatController {
   static createChat = controllerHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id as UUID;
     const {
-      is_group_chat,
       name,
       description,
       avatar,
       participants,
       first_message,
       media,
+      context_type, // 'direct' | 'group' | 'marketplace'
+      context_id, // marketplace_item_id if context_type = 'marketplace'
     } = req.body;
-    console.log("errror 1");
-    console.log("errror 1");
-    console.log("errror 1");
-    console.log("errror 1");
-    // 1. Check for duplicate group chat
-    const existingChat = await ChatService.findGroupChatByNameAndParticipants(
-      name,
-      participants
-    );
-    if (existingChat) {
-      return res.status(200).json({ chat: existingChat, duplicate: true });
-    }
 
     // Create chat data
     const chatData = {
-      is_group_chat,
-      name: is_group_chat ? name : undefined,
+      context_type,
+      context_id: context_type === "marketplace" ? context_id : null,
+      is_group_chat: context_type === "group",
+      name: context_type === "group" ? name : null,
       description,
       avatar,
-      creator_id: is_group_chat ? userId : undefined,
+      creator_id: userId,
     };
 
-    const participantsData = [
-      {
-        user_id: userId,
-        role: is_group_chat ? MemberRole.ADMIN : MemberRole.MEMBER,
-        // is_muted: false,
-      },
-      ...participants.map((participantId: string) => ({
-        user_id: participantId,
-        role: MemberRole.ADMIN,
-        // is_muted: false,
-      })),
-    ];
-
     // 2. Create the chat
-    const chat = await ChatService.createChat(chatData, participantsData);
+    const { chat } = await ChatService.createChat(chatData, participants);
 
     // 3. If first_message is present, create the first message
     if (first_message) {
@@ -69,10 +47,6 @@ export class ChatController {
         media,
       });
     }
-    console.log("errror 22222");
-    console.log("errror 22222");
-    console.log("errror 22222");
-    console.log("errror 22222");
 
     // Get chat summary
     const chatSummary = await ChatService.getChatSummary(chat.id, userId);

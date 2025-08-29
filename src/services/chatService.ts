@@ -8,23 +8,108 @@ import {
   ChatParticipantCreate,
   ChatSummary,
   ChatUpdate,
+  createChatResponse,
   MessageWithUser,
 } from "../models/chat.model";
 import { asyncHandler } from "../utils/asyncHandler";
 import { FriendshipService } from "./friendshipService";
 import { PrivacySettingsService } from "./privacySettingsService";
-import { ChatParticipantDetails } from "@/types/models";
+import { ChatParticipantDetails } from "../types/models";
+import { MemberRole } from "../models";
 
 export class ChatService {
+  static findChatByContext = async (
+    context_type: string,
+    context_id?: string
+  ) => {
+    const query = supabaseAdmin!
+      .from("chats")
+      .select("*")
+      .eq("context_type", context_type);
+
+    if (context_id) {
+      query.eq("context_id", context_id);
+    }
+
+    const { data, error } = await query.maybeSingle();
+
+    if (error) throw new AppError(error.message, 400);
+
+    return data;
+  };
+
+  /**
+   * Finds an existing direct chat between two users, if one exists.
+   *
+   * Purpose:
+   * - Ensures there is only one direct chat per user pair.
+   * - Used to prevent duplicate direct chats when creating a new one.
+   *
+   * How it works:
+   * - Filters chats where `context_type = 'direct'`.
+   * - Joins `chat_participants` to ensure both users are participants.
+   * - Uses SQL grouping (GROUP BY + HAVING) to guarantee that both users are in the same chat.
+   * - Returns the first matching chat, or null if no chat exists.
+   *
+   * Returns:
+   * - Chat object if found
+   * - null if no direct chat exists between the users
+   *
+   * Notes:
+   * - Efficient even at scale because the database handles participant filtering.
+   * - Works for exactly 2 participants; for group chats with more users, use a different service.
+   * - Can be extended for participant hashes or multi-user direct chats if needed in the future.
+   */
+  static findDirectChat = async (userA: string, userB: string) => {
+    console.log(userA, userB);
+
+    const { data, error } = await supabaseAdmin!.rpc("find_direct_chat", {
+      user_a: userA,
+      user_b: userB,
+    });
+
+    if (error) throw new AppError(error.message, 400);
+
+    return data?.[0] ?? null;
+  };
+
   /**
    * Create a new chat
    */
   static createChat = asyncHandler(
     async (
       chatData: ChatCreate,
-      participants: ChatParticipantCreate[]
-    ): Promise<Chat> => {
-      // Start a transaction
+      participants: string[]
+    ): Promise<createChatResponse> => {
+      // 1. Handle direct duplicate (2 participants only)
+      if (chatData.context_type === "direct") {
+        if (participants.length !== 1) {
+          throw new AppError(
+            "Direct chat must have exactly 1 participants",
+            400
+          );
+        }
+
+        const existingDirectChat = await ChatService.findDirectChat(
+          chatData.creator_id!,
+          participants[0]
+        );
+        if (existingDirectChat) {
+          return { chat: existingDirectChat as Chat, isDuplicate: true };
+        }
+      }
+
+      // 2. Check for duplicate marketplace chat
+      if (chatData.context_type === "marketplace") {
+        const existingChat = await ChatService.findChatByContext(
+          "marketplace",
+          chatData.context_id
+        );
+        if (existingChat)
+          return { chat: existingChat as Chat, isDuplicate: true };
+      }
+
+      // 3. Insert chat
       const { data: chat, error: chatError } = await supabaseAdmin!
         .from("chats")
         .insert(chatData)
@@ -34,25 +119,43 @@ export class ChatService {
       if (chatError) {
         throw new AppError(chatError.message, 400);
       }
+      console.log(participants, "participants");
 
-      // Add participants
-      if (participants.length > 0) {
-        const participantsWithChatId = participants.map((p) => ({
-          ...p,
+      // 4. Role assignment
+      // eslint-disable-next-line prefer-const
+      let participantsWithChatId = participants.map((userId) => ({
+        user_id: userId,
+        chat_id: chat.id,
+        role: MemberRole.MEMBER,
+      }));
+
+      // Add the creator if not already included
+      if (
+        !participantsWithChatId.find((p) => p.user_id === chatData.creator_id)
+      ) {
+        participantsWithChatId.push({
+          user_id: chatData.creator_id!,
           chat_id: chat.id,
-          role: "admin",
-        }));
+          role:
+            chatData.context_type === "group"
+              ? MemberRole.ADMIN
+              : MemberRole.MEMBER,
+        });
+      }
+      console.log(participantsWithChatId, "participantsWithChatId");
 
-        const { error: participantsError } = await supabaseAdmin!
-          .from("chat_participants")
-          .insert(participantsWithChatId);
+      // 5. Insert participants (with rollback on error)
+      const { error: participantsError } = await supabaseAdmin!
+        .from("chat_participants")
+        .insert(participantsWithChatId);
 
-        if (participantsError) {
-          throw new AppError(participantsError.message, 400);
-        }
+      if (participantsError) {
+        // rollback
+        await supabaseAdmin!.from("chats").delete().eq("id", chat.id);
+        throw new AppError(participantsError.message, 400);
       }
 
-      return chat as Chat;
+      return { chat: chat as Chat, isDuplicate: false };
     },
     "Failed to create chat"
   );

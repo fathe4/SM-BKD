@@ -4,7 +4,7 @@
 import { supabase } from "../config/supabase";
 import { logger } from "../utils/logger";
 import { AppError } from "../middlewares/errorHandler";
-import { BasicUserProfile, getUserBasicProfile } from "../utils/profileUtils";
+import { BasicUserProfile } from "../utils/profileUtils";
 
 interface SearchOptions {
   page?: number;

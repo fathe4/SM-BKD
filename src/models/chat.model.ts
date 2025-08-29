@@ -6,9 +6,16 @@ export interface Chat {
   created_at: Date;
   is_group_chat: boolean;
   name?: string;
+  context_type?: "direct" | "group" | "marketplace";
+  context_id?: string;
   description?: string;
   avatar?: string | null;
   creator_id?: UUID;
+}
+
+export interface createChatResponse {
+  chat: Chat;
+  isDuplicate: boolean;
 }
 
 export interface ChatCreate extends Omit<Chat, "id" | "created_at"> {}

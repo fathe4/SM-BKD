@@ -6,7 +6,10 @@ import {
   FriendSummary,
   FriendshipCreate,
 } from "../models/friendship.model";
-import { getUserBasicProfile } from "../utils/profileUtils";
+import {
+  getMultipleUserProfiles,
+  getUserBasicProfile,
+} from "../utils/profileUtils";
 // Using string instead of UUID type from crypto to avoid template literal type issues
 import { asyncHandler } from "../utils/asyncHandler";
 import { UUID } from "crypto";
@@ -198,6 +201,7 @@ export class FriendshipService {
           requester_id,
           addressee_id,
           status,
+          chat_id,
           created_at,
           updated_at
         `,
@@ -224,26 +228,36 @@ export class FriendshipService {
         return { friendships: [], total: 0 };
       }
 
-      // Transform friendships to include user details
-      const friendshipSummaries = await Promise.all(
-        data.map(async (friendship) => {
-          // Get the ID of the other user in the friendship
-          const otherUserId =
-            friendship.requester_id === userId
-              ? friendship.addressee_id
-              : friendship.requester_id;
-
-          // Get the other user's profile details
-          const userProfile = await getUserBasicProfile(otherUserId as string);
-
-          return {
-            ...userProfile,
-            friendship_id: friendship.id,
-            friendship_status: friendship.status,
-            is_requester: friendship.requester_id === userId,
-          } as FriendSummary;
-        })
+      const otherUserIds = [
+        ...new Set(
+          data
+            .map((friendship) =>
+              friendship.requester_id === userId
+                ? friendship.addressee_id
+                : friendship.requester_id
+            )
+            .filter((id) => id && id !== userId)
+        ),
+      ];
+      const profiles = await getMultipleUserProfiles(otherUserIds);
+      const profileMap = Object.fromEntries(
+        profiles.map((profile) => [profile.id, profile])
       );
+
+      const friendshipSummaries = data.map((friendship) => {
+        const otherUserId =
+          friendship.requester_id === userId
+            ? friendship.addressee_id
+            : friendship.requester_id;
+        const userProfile = profileMap[otherUserId];
+        return {
+          ...userProfile,
+          friendship_id: friendship.id,
+          friendship_status: friendship.status,
+          is_requester: friendship.requester_id === userId,
+          chat_id: friendship.chat_id,
+        };
+      });
 
       return {
         friendships: friendshipSummaries,
