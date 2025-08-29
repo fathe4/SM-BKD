@@ -53,62 +53,14 @@ export async function createPostBoostCheckout(req: Request, res: Response) {
   }
 }
 
-export const handleStripeWebhookController = async (
-  req: Request,
-  res: Response
-) => {
+export const handleStripeWebhookController = async (req: Request, res: Response) => {
   try {
     console.log("WEBHOOK");
 
     const sig = req.headers["stripe-signature"] as string;
-
-    // Fix the Buffer issue - get the original raw body
-    let rawBody: Buffer;
-
-    if (Buffer.isBuffer(req.body)) {
-      // Check if this is a serialized Buffer object that needs reconstruction
-      const bodyString = req.body.toString();
-
-      // If it starts with JSON, it means the Buffer was serialized
-      if (
-        bodyString.startsWith("{") &&
-        // eslint-disable-next-line quotes
-        bodyString.includes('"type":"Buffer"')
-      ) {
-        try {
-          const parsedBody = JSON.parse(bodyString);
-          if (parsedBody.type === "Buffer" && Array.isArray(parsedBody.data)) {
-            // Reconstruct the original Buffer from the data array
-            rawBody = Buffer.from(parsedBody.data);
-            console.log(
-              "[StripeWebhook] Reconstructed Buffer from serialized data"
-            );
-          } else {
-            rawBody = req.body;
-          }
-        } catch (e) {
-          rawBody = req.body;
-        }
-      } else {
-        rawBody = req.body;
-      }
-    } else if (typeof req.body === "string") {
-      rawBody = Buffer.from(req.body, "utf8");
-    } else {
-      // If it's an object, stringify it
-      rawBody = Buffer.from(JSON.stringify(req.body), "utf8");
-    }
-
-    console.log("[DEBUG] Using raw body length:", rawBody.length);
-    console.log(
-      "[DEBUG] Raw body preview:",
-      rawBody.toString().substring(0, 100)
-    );
-
-    await paymentService.handleStripeWebhook(rawBody, sig);
+    await paymentService.handleStripeWebhook(req.body, sig);
     res.status(200).json({ received: true });
   } catch (error: any) {
-    console.error("Webhook controller error:", error.message);
     res.status(400).send(`Webhook Error: ${error.message}`);
   }
 };
