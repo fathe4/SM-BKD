@@ -28,7 +28,6 @@ import storyRoutes from "./routes/story.routes";
 import paymentRoutes from "./routes/payment.route";
 import subscriptionRoutes from "./routes/subscription.routes";
 import { setupMessageRetentionJob } from "./jobs/messageRetentionJob";
-import { handleStripeWebhookController } from "./controllers/payment.controller";
 
 // Load environment variables
 config();
