@@ -56,12 +56,6 @@ const corsOptions = {
   maxAge: 86400, // 24 hours
 };
 
-app.post(
-  `${apiPrefix}/payments/webhook`,
-  express.raw({ type: "application/json" }),
-  handleStripeWebhookController
-);
-
 
 // Apply middlewares
 app.use(cors(corsOptions)); // Enable CORS for all routes

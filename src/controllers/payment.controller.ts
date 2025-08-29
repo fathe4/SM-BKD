@@ -58,8 +58,12 @@ export const handleStripeWebhookController = async (
   res: Response
 ) => {
   try {
-    console.log("WEBHOOK");
-
+    console.log("[DEBUG] Request headers:", req.headers);
+    console.log("[DEBUG] Content-Type:", req.headers["content-type"]);
+    console.log("[DEBUG] Body type:", typeof req.body);
+    console.log("[DEBUG] Is Buffer:", Buffer.isBuffer(req.body));
+    console.log("[DEBUG] Body length:", req.body?.length);
+    console.log("[DEBUG] Stripe signature:", req.headers["stripe-signature"]);
     const sig = req.headers["stripe-signature"] as string;
     await paymentService.handleStripeWebhook(req.body, sig);
     res.status(200).json({ received: true });
