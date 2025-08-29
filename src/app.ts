@@ -67,6 +67,11 @@ app.use(
     contentSecurityPolicy: false,
   })
 );
+app.post(
+  `${apiPrefix}/payments/webhook`,
+  express.raw({ type: "application/json" }),
+  handleStripeWebhookController
+);
 
 app.use(`${apiPrefix}/payments`, paymentRoutes);
 app.use(express.json()); // Parse JSON request bodies
