@@ -13,20 +13,13 @@ const router = Router();
  * @desc    Stripe webhook handler
  * @access  Public
  */
-router.post(
-  "/webhook",
-  (req, res, next) => {
-    // Ensure we get the raw body for Stripe webhooks
-    if (req.headers["content-type"] === "application/json") {
-      express.raw({ type: "application/json" })(req, res, next);
-    } else {
-      next();
-    }
-  },
-  handleStripeWebhookController
-);
+// router.post(
+//   "/webhook",
+//   express.raw({ type: "application/json" }),
+//   handleStripeWebhookController
+// );
 
-router.use(express.json());
+// router.use(express.json());
 
 /**
  * @route   POST /api/payments/checkout/subscription

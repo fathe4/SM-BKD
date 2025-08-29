@@ -28,6 +28,7 @@ import storyRoutes from "./routes/story.routes";
 import paymentRoutes from "./routes/payment.route";
 import subscriptionRoutes from "./routes/subscription.routes";
 import { setupMessageRetentionJob } from "./jobs/messageRetentionJob";
+import { handleStripeWebhookController } from "./controllers/payment.controller";
 
 // Load environment variables
 config();
@@ -54,6 +55,13 @@ const corsOptions = {
   credentials: true,
   maxAge: 86400, // 24 hours
 };
+
+app.post(
+  `${apiPrefix}/payments/webhook`,
+  express.raw({ type: "application/json" }),
+  handleStripeWebhookController
+);
+
 
 // Apply middlewares
 app.use(cors(corsOptions)); // Enable CORS for all routes
