@@ -16,6 +16,7 @@ import { FriendshipService } from "./friendshipService";
 import { PrivacySettingsService } from "./privacySettingsService";
 import { ChatParticipantDetails } from "../types/models";
 import { MemberRole } from "../models";
+import { redisService } from "./redis.service";
 
 export class ChatService {
   static findChatByContext = async (
@@ -105,6 +106,7 @@ export class ChatService {
           "marketplace",
           chatData.context_id
         );
+
         if (existingChat)
           return { chat: existingChat as Chat, isDuplicate: true };
       }
@@ -119,7 +121,6 @@ export class ChatService {
       if (chatError) {
         throw new AppError(chatError.message, 400);
       }
-      console.log(participants, "participants");
 
       // 4. Role assignment
       // eslint-disable-next-line prefer-const
@@ -142,7 +143,6 @@ export class ChatService {
               : MemberRole.MEMBER,
         });
       }
-      console.log(participantsWithChatId, "participantsWithChatId");
 
       // 5. Insert participants (with rollback on error)
       const { error: participantsError } = await supabaseAdmin!
@@ -154,6 +154,7 @@ export class ChatService {
         await supabaseAdmin!.from("chats").delete().eq("id", chat.id);
         throw new AppError(participantsError.message, 400);
       }
+      console.log(chat, "chat");
 
       return { chat: chat as Chat, isDuplicate: false };
     },
@@ -161,7 +162,7 @@ export class ChatService {
   );
 
   /**
-   * Get a chat by ID
+   * Get chat by ID - with caching
    */
   static getChatById = asyncHandler(
     async (chatId: string, userId: string): Promise<Chat | null> => {
@@ -172,6 +173,14 @@ export class ChatService {
         throw new AppError("You are not a participant in this chat", 403);
       }
 
+      // Check cache
+      const cacheKey = `chat:${chatId}`;
+      const cached = await redisService.get<Chat>(cacheKey);
+      console.log(cached, "cached");
+
+      if (cached) return cached;
+
+      // Query database
       const { data, error } = await supabase
         .from("chats")
         .select("*")
@@ -185,20 +194,41 @@ export class ChatService {
         throw new AppError(error.message, 400);
       }
 
+      // Cache the result
+      if (data) {
+        await redisService.set(cacheKey, data, 300); // 5 minutes
+      }
+
       return data as Chat;
     },
     "Failed to get chat"
   );
-
-  /**
-   * Get all chats for a user with chat summaries
-   */
+  // /**
+  //  * Get all chats for a user with chat summaries
+  //  */
   static getUserChats = asyncHandler(
     async (
       userId: string,
       page = 1,
       limit = 20
     ): Promise<{ chats: ChatSummary[]; total: number }> => {
+      console.log("getUserChats" + new Date());
+
+      // Try to get from Redis cache first
+      const cachedResult = await redisService.getChatList(userId);
+      if (cachedResult) {
+        console.log(
+          "✅ Cache hit: Returning cached chat list for user",
+          userId
+        );
+        return cachedResult;
+      }
+
+      console.log(
+        "❌ Cache miss: Fetching chat list from database for user",
+        userId
+      );
+
       const offset = (page - 1) * limit;
 
       // Get chats where the user is a participant
@@ -240,19 +270,32 @@ export class ChatService {
         return dateB.getTime() - dateA.getTime();
       });
 
-      return {
+      const result = {
         chats: chatSummaries,
         total: count || 0,
       };
+
+      // Cache the result
+      try {
+        await redisService.setChatList(userId, result.chats, result.total);
+        console.log("✅ Cached chat list for user", userId);
+      } catch (error) {
+        console.log("❌ Failed to cache chat list:", error);
+      }
+
+      console.log("get user chats" + new Date());
+      return result;
     },
     "Failed to get user chats"
   );
 
-  /**
-   * Get a summary of a chat with last message and participants
-   */
+  // /**
+  //  * Get a summary of a chat with last message and participants
+  //  */
   static getChatSummary = asyncHandler(
     async (chatId: string, userId: string): Promise<ChatSummary> => {
+      console.log("is it a chat header");
+
       // Get the chat details
       const { data: chat, error: chatError } = await supabase
         .from("chats")
@@ -270,11 +313,11 @@ export class ChatService {
           .from("chat_participants")
           .select(
             `
-          id, 
+          id,
           user_id,
           users!inner (
-            id, 
-            username, 
+            id,
+            username,
             profile_picture
           )
         `
@@ -373,7 +416,7 @@ export class ChatService {
 
       // Format the chat summary
       return {
-        id: chat.id,
+        ...chat,
         name: getChatName(chat, participants, userId),
         is_group_chat: chat.is_group_chat,
         avatar: getChatAvatar(chat, participants, userId),
@@ -562,13 +605,13 @@ export class ChatService {
     async (chatId: string, userId?: string): Promise<void> => {
       // If userId is provided, verify they're an admin
       if (userId) {
-        // const isAdmin = await this.isUserChatAdmin(userId, chatId);
-        // if (!isAdmin) {
-        //   throw new AppError(
-        //     "You don't have permission to delete this chat",
-        //     403
-        //   );
-        // }
+        const isAdmin = await this.canUserDeleteChat(userId, chatId);
+        if (!isAdmin) {
+          throw new AppError(
+            "You don't have permission to delete this chat",
+            403
+          );
+        }
       }
 
       // Delete all messages in the chat
@@ -635,7 +678,7 @@ export class ChatService {
         .select("role")
         .eq("chat_id", chatId)
         .eq("user_id", userId)
-        .eq("role", "admin")
+        .eq("role", "member")
         .maybeSingle();
 
       if (error) {
@@ -645,6 +688,53 @@ export class ChatService {
       return !!data;
     },
     "Failed to check chat admin status"
+  );
+
+  static canUserDeleteChat = asyncHandler(
+    async (userId: string, chatId: string): Promise<boolean> => {
+      // Get chat info
+      const chat = await this.getChatById(chatId, userId);
+
+      if (!chat) throw new AppError("No Chat Found", 400);
+
+      // Get user role in this chat
+      const { data: participant, error: participantError } = await supabase
+        .from("chat_participants")
+        .select("role")
+        .eq("chat_id", chatId)
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (participantError) {
+        throw new AppError(participantError.message, 400);
+      }
+
+      if (!participant) {
+        return false; // user is not part of the chat
+      }
+
+      const role = participant.role;
+
+      // --- RULES based on context_type ---
+      switch (chat.context_type) {
+        case "direct":
+          // in a direct message, either user can "delete" (really just hide for themselves)
+          return true;
+
+        case "group":
+          // only admin or owner can delete the entire group chat
+          return role === "admin";
+
+        case "marketplace":
+          // e.g. only the "owner" of the marketplace context_id (maybe a product or listing) can delete
+          return role === "member";
+
+        default:
+          // fallback: require admin/owner
+          return role === "admin" || role === "member";
+      }
+    },
+    "Failed to check chat deletion permission"
   );
 
   /**

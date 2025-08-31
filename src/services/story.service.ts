@@ -60,80 +60,57 @@ export const getActiveStories = async (
   options: PaginationOptions
 ): Promise<PaginatedStoriesResponse> => {
   const { page, limit } = options;
-  const now = new Date().toISOString();
 
-  // 1. Concurrently fetch the total user count AND the user IDs for the current page
-  const [
-    { data: totalUsers, error: countError },
-    { data: usersData, error: rpcError },
-  ] = await Promise.all([
-    supabase.rpc("count_active_story_users"),
-    supabase.rpc("get_paginated_story_users", {
-      page_number: page,
-      page_size: limit,
-    }),
-  ]);
+  const { data, error } = await supabase.rpc("get_active_stories_paginated", {
+    page_number: page,
+    page_size: limit,
+  });
 
-  if (countError) throw new Error(countError.message);
-  if (rpcError) throw new Error(rpcError.message);
+  if (error) throw new Error(error.message);
 
-  const userIds = usersData.map((u: { user_id: string }) => u.user_id);
+  const totalUsers = data[0]?.total_users || 0;
 
-  let groupedStories: any[] = [];
-  // Only fetch stories if there are users on the current page
-  if (userIds.length > 0) {
-    const { data: storiesData, error: storiesError } = await supabase
-      .from("stories")
-      .select(
-        `
-        *,
-        user:users (
-          id,
-          username,
-          profile_picture
-        )
-      `
-      )
-      .in("user_id", userIds)
-      .gt("expires_at", now)
-      .order("created_at", { ascending: false });
+  // Group stories by user
+  const userStoriesMap = new Map<string, { user: any; stories: any[] }>();
 
-    if (storiesError) {
-      throw new Error(storiesError.message);
+  data.forEach((row: any) => {
+    const userId = row.user_id;
+    const user = {
+      id: row.user_id,
+      username: row.username,
+      profile_picture: row.profile_picture,
+    };
+
+    const story = {
+      id: row.story_id,
+      content: row.content,
+      created_at: row.created_at,
+      expires_at: row.expires_at,
+      media_type: row.media_type,
+      media_url: row.media_url,
+      view_count: row.view_count,
+      visibility: row.visibility,
+      user: user, // Embed user in each story
+    };
+
+    if (!userStoriesMap.has(userId)) {
+      userStoriesMap.set(userId, { user, stories: [] });
     }
+    userStoriesMap.get(userId)?.stories.push(story);
+  });
 
-    // Grouping logic (same as before)
-    const userStoriesMap = new Map<string, { user: any; stories: any[] }>();
-    storiesData.forEach((story: any) => {
-      if (!userStoriesMap.has(story.user_id)) {
-        userStoriesMap.set(story.user_id, { user: story.user, stories: [] });
-      }
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { user, ...storyWithoutUser } = story;
-      userStoriesMap.get(story.user_id)?.stories.push(storyWithoutUser);
-    });
-
-    const storiesArray = Array.from(userStoriesMap.values());
-    storiesArray.sort(
-      (a, b) => userIds.indexOf(a.user.id) - userIds.indexOf(b.user.id)
-    );
-    groupedStories = storiesArray;
-  }
-
-  // 2. Calculate pagination metadata
+  const groupedStories = Array.from(userStoriesMap.values());
   const totalPages = Math.ceil(totalUsers / limit);
-  const pagination: PaginationMeta = {
-    currentPage: page,
-    limit: limit,
-    totalUsers: totalUsers,
-    totalPages: totalPages,
-    hasNextPage: page < totalPages,
-  };
 
-  // 3. Return the final structured response
   return {
     data: groupedStories,
-    pagination: pagination,
+    pagination: {
+      currentPage: page,
+      limit,
+      totalUsers,
+      totalPages,
+      hasNextPage: page < totalPages,
+    },
   };
 };
 

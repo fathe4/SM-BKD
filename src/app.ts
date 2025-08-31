@@ -28,9 +28,18 @@ import storyRoutes from "./routes/story.routes";
 import paymentRoutes from "./routes/payment.route";
 import subscriptionRoutes from "./routes/subscription.routes";
 import { setupMessageRetentionJob } from "./jobs/messageRetentionJob";
+import { redisService } from "./services/redis.service";
 
 // Load environment variables
 config();
+
+// Initialize Redis connection
+try {
+  redisService.initialize();
+  logger.info("✅ Redis service initialized successfully");
+} catch (error) {
+  logger.error("❌ Failed to initialize Redis service:", error);
+}
 
 // Create Express application
 const app: Application = express();
@@ -55,7 +64,6 @@ const corsOptions = {
   maxAge: 86400, // 24 hours
 };
 
-
 // Apply middlewares
 app.use(cors(corsOptions)); // Enable CORS for all routes
 
@@ -74,13 +82,30 @@ app.use(morgan("dev", { stream: morganStream })); // Request logging
 app.use("/debug", debugRoutes);
 
 // Health check route
-app.get("/health", (req: Request, res: Response) => {
-  res.status(200).json({
-    status: "success",
-    message: "Server is healthy",
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV,
-  });
+app.get("/health", async (req: Request, res: Response) => {
+  try {
+    const redisStatus = redisService.isReady();
+    const redisStats = await redisService.getStats();
+
+    res.status(200).json({
+      status: "success",
+      message: "Server is healthy",
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV,
+      redis: {
+        connected: redisStatus,
+        stats: redisStats,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: "error",
+      message: "Server health check failed",
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV,
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
 });
 
 // Initialize the message retention job when server starts
