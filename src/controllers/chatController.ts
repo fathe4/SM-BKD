@@ -29,7 +29,7 @@ export class ChatController {
       context_type,
       context_id: context_type === "marketplace" ? context_id : null,
       is_group_chat: context_type === "group",
-      name: context_type === "group" ? name : null,
+      name: name,
       description,
       avatar,
       creator_id: userId,
