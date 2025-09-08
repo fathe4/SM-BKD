@@ -6,7 +6,7 @@ import { logger } from "../utils/logger";
 
 export type ResourceOwnershipChecker = (
   resourceId: string,
-  userId: string
+  userId: string,
 ) => Promise<boolean>;
 
 /**
@@ -21,7 +21,7 @@ export const canAccessResource = (
   paramName: string,
   checkOwnership: ResourceOwnershipChecker,
   allowOwner = true,
-  allowedRoles: UserRole[] = [UserRole.ADMIN]
+  allowedRoles: UserRole[] = [UserRole.ADMIN],
 ) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -64,7 +64,7 @@ export const canAccessResource = (
       // If we reach here, access is denied
       throw new AppError(
         "You do not have permission to access this resource",
-        403
+        403,
       );
     } catch (error) {
       if (error instanceof AppError) {

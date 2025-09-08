@@ -103,7 +103,7 @@ export const validateAdvancedSearch = [
       const min = req.body.ageRange?.min;
       if (min !== undefined && max < min) {
         throw new Error(
-          "Maximum age must be greater than or equal to minimum age"
+          "Maximum age must be greater than or equal to minimum age",
         );
       }
       return true;

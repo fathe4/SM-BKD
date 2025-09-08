@@ -13,7 +13,7 @@ export class StorageService {
   static async uploadFile(
     bucketName: string,
     file: Express.Multer.File,
-    folder?: string
+    folder?: string,
   ): Promise<FileUploadResult> {
     try {
       // Generate a unique filename to prevent collisions
@@ -84,7 +84,7 @@ export class StorageService {
   static async getSignedUrl(
     bucketName: string,
     filePath: string,
-    expiresIn = 60
+    expiresIn = 60,
   ): Promise<string> {
     try {
       const { data, error } = await supabase.storage
@@ -95,7 +95,7 @@ export class StorageService {
         logger.error("Error creating signed URL:", error);
         throw new AppError(
           `Failed to create signed URL: ${error.message}`,
-          400
+          400,
         );
       }
 

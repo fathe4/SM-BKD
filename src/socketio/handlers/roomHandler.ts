@@ -63,7 +63,7 @@ export function roomHandler(io: SocketIOServer, socket: Socket): void {
   socket.on("disconnect", () => {
     // Get all rooms this socket is in
     const joinedRooms = Array.from(socket.rooms).filter(
-      (room) => room !== socket.id && room !== userId
+      (room) => room !== socket.id && room !== userId,
     );
 
     joinedRooms.forEach((roomId) => {

@@ -55,7 +55,7 @@ router.get(
   "/all",
   authenticate,
   canAccessProfile(false, [UserRole.ADMIN, UserRole.MODERATOR]),
-  PostController.getAllPosts
+  PostController.getAllPosts,
 );
 
 /**
@@ -75,7 +75,7 @@ router.put(
   canAccessPost(true, [UserRole.ADMIN]),
   uploadPostMedia, // Add media upload for post updates too
   validateUpdatePost,
-  PostController.updatePost
+  PostController.updatePost,
 );
 
 /**
@@ -86,7 +86,7 @@ router.put(
 router.delete(
   "/:id",
   canAccessPost(true, [UserRole.ADMIN, UserRole.MODERATOR]),
-  PostController.deletePost
+  PostController.deletePost,
 );
 
 /**
@@ -95,7 +95,7 @@ router.delete(
 router.post(
   "/:postId/reactions",
   validateReaction,
-  ReactionController.addReaction
+  ReactionController.addReaction,
 );
 
 router.get("/:postId/reactions", ReactionController.getReactions);
@@ -107,7 +107,7 @@ router.get("/:postId/reactions/status", ReactionController.getReactionStatus);
 router.patch(
   "/:postId/reactions",
   validateReaction,
-  ReactionController.updateReaction
+  ReactionController.updateReaction,
 );
 
 router.delete("/:postId/reactions", ReactionController.deleteReaction);

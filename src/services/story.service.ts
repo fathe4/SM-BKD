@@ -57,7 +57,7 @@ interface PaginationOptions {
 }
 
 export const getActiveStories = async (
-  options: PaginationOptions
+  options: PaginationOptions,
 ): Promise<PaginatedStoriesResponse> => {
   const { page, limit } = options;
 
@@ -133,7 +133,7 @@ export const getStoryById = async (id: string): Promise<Story | null> => {
 
 export const deleteStory = async (
   id: string,
-  userId: string
+  userId: string,
 ): Promise<void> => {
   const { error } = await supabase
     .from("stories")
@@ -148,7 +148,7 @@ export const deleteStory = async (
 
 export const viewStory = async (
   storyId: string,
-  userId: string
+  userId: string,
 ): Promise<void> => {
   // Check if the user has already viewed the story
   const { data: existingView, error: checkError } = await supabase
@@ -201,7 +201,7 @@ export const getStoryViews = async (storyId: string) => {
                 username,
                 profile_picture
             )
-        `
+        `,
     )
     .eq("story_id", storyId);
 

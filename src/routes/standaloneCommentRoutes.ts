@@ -32,7 +32,7 @@ router.patch(
   canAccessResource("commentId", isCommentOwner, true, []), // Only allow comment owner
   uploadCommentMedia, // Add the upload middleware
   validateUpdateComment,
-  CommentController.updateComment
+  CommentController.updateComment,
 );
 /**
  * @route DELETE /api/v1/comments/:commentId
@@ -45,7 +45,7 @@ router.delete(
     UserRole.ADMIN,
     UserRole.MODERATOR,
   ]), // Allow comment owner or admin/moderator
-  CommentController.deleteComment
+  CommentController.deleteComment,
 );
 
 export default router;

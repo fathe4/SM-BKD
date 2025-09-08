@@ -89,7 +89,7 @@ export class AuthController {
       const token = jwt.sign(
         { id: newUser.id },
         process.env.JWT_SECRET || "default_secret",
-        { expiresIn: "7d" }
+        { expiresIn: "7d" },
       );
 
       // Track user device and location
@@ -100,7 +100,7 @@ export class AuthController {
           clientInfo.ipAddress,
           clientInfo.deviceToken,
           clientInfo.deviceType,
-          locationData
+          locationData,
         ).catch((err) => {
           // Silently log the error but don't disrupt login process
           logger.error("Error tracking location during registration:", err);
@@ -159,7 +159,7 @@ export class AuthController {
       // Verify password
       const isPasswordValid = await bcrypt.compare(
         password,
-        user.password_hash
+        user.password_hash,
       );
       if (!isPasswordValid) {
         throw new AppError("Invalid Password", 401);
@@ -173,7 +173,7 @@ export class AuthController {
           role: user.role,
         },
         JWT_SECRET,
-        { algorithm: "HS256", expiresIn: "7d" }
+        { algorithm: "HS256", expiresIn: "7d" },
       );
 
       // Generate refresh token
@@ -182,7 +182,7 @@ export class AuthController {
           id: user.id,
         },
         JWT_REFRESH_SECRET,
-        { expiresIn: "7d" }
+        { expiresIn: "7d" },
       );
 
       // Track user's device and location if provided
@@ -192,7 +192,7 @@ export class AuthController {
         // Skip geolocation API call for local IPs in development
         if (clientInfo.isLocalIp && process.env.NODE_ENV === "development") {
           logger.info(
-            "Skipping geolocation API call for local IP in development environment"
+            "Skipping geolocation API call for local IP in development environment",
           );
         } else {
           IpLocationService.trackLoginLocation(
@@ -200,7 +200,7 @@ export class AuthController {
             clientInfo.ipAddress,
             clientInfo.deviceToken,
             clientInfo.deviceType,
-            locationData
+            locationData,
           ).catch((err) => {
             logger.error("Error tracking location during login:", err);
           });
@@ -276,7 +276,7 @@ export class AuthController {
           role: user.role,
         },
         JWT_SECRET,
-        { expiresIn: "7d" }
+        { expiresIn: "7d" },
       );
 
       res.status(200).json({

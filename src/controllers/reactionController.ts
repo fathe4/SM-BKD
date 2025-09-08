@@ -30,7 +30,7 @@ export class ReactionController {
           reaction,
         },
       });
-    }
+    },
   );
 
   /**
@@ -47,7 +47,7 @@ export class ReactionController {
         targetId,
         TargetType.POST,
         page,
-        limit
+        limit,
       );
 
       res.status(200).json({
@@ -60,7 +60,7 @@ export class ReactionController {
           limit,
         },
       });
-    }
+    },
   );
 
   /**
@@ -73,7 +73,7 @@ export class ReactionController {
 
       const summary = await ReactionService.getReactionSummary(
         targetId,
-        TargetType.POST
+        TargetType.POST,
       );
 
       res.status(200).json({
@@ -82,7 +82,7 @@ export class ReactionController {
           summary,
         },
       });
-    }
+    },
   );
 
   /**
@@ -97,7 +97,7 @@ export class ReactionController {
       const reaction = await ReactionService.getUserReactionToTarget(
         userId,
         targetId,
-        TargetType.POST
+        TargetType.POST,
       );
 
       res.status(200).json({
@@ -107,7 +107,7 @@ export class ReactionController {
           reaction: reaction || null,
         },
       });
-    }
+    },
   );
 
   /**
@@ -124,7 +124,7 @@ export class ReactionController {
       const existingReaction = await ReactionService.getUserReactionToTarget(
         userId,
         targetId,
-        TargetType.POST
+        TargetType.POST,
       );
 
       if (!existingReaction) {
@@ -135,7 +135,7 @@ export class ReactionController {
       const reaction = await ReactionService.updateReaction(
         existingReaction.id,
         userId,
-        reaction_type
+        reaction_type,
       );
 
       res.status(200).json({
@@ -144,7 +144,7 @@ export class ReactionController {
           reaction,
         },
       });
-    }
+    },
   );
 
   /**
@@ -159,10 +159,10 @@ export class ReactionController {
       await ReactionService.deleteUserReactionToTarget(
         userId,
         targetId,
-        TargetType.POST
+        TargetType.POST,
       );
 
       res.status(204).send();
-    }
+    },
   );
 }

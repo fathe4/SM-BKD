@@ -30,7 +30,7 @@ export const validateFriendshipStatus = [
     .withMessage("Status is required")
     .isIn(Object.values(FriendshipStatus))
     .withMessage(
-      `Status must be one of: ${Object.values(FriendshipStatus).join(", ")}`
+      `Status must be one of: ${Object.values(FriendshipStatus).join(", ")}`,
     ),
 
   validateRequest,
@@ -80,7 +80,7 @@ export const validateFriendshipPagination = [
     .optional()
     .isIn(Object.values(FriendshipStatus))
     .withMessage(
-      `Status must be one of: ${Object.values(FriendshipStatus).join(", ")}`
+      `Status must be one of: ${Object.values(FriendshipStatus).join(", ")}`,
     ),
 
   validateRequest,

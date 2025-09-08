@@ -22,7 +22,7 @@ export async function createSubscriptionCheckout(req: Request, res: Response) {
       req.user?.id,
       tierId,
       successUrl,
-      cancelUrl
+      cancelUrl,
     );
     res.status(200).json({ sessionId: session.id, url: session.url });
   } catch (error: any) {
@@ -45,7 +45,7 @@ export async function createPostBoostCheckout(req: Request, res: Response) {
       userId,
       boostId,
       successUrl,
-      cancelUrl
+      cancelUrl,
     );
     res.status(200).json({ sessionId: session.id, url: session.url });
   } catch (error: any) {
@@ -53,7 +53,10 @@ export async function createPostBoostCheckout(req: Request, res: Response) {
   }
 }
 
-export const handleStripeWebhookController = async (req: Request, res: Response) => {
+export const handleStripeWebhookController = async (
+  req: Request,
+  res: Response,
+) => {
   try {
     console.log("WEBHOOK");
 

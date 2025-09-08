@@ -33,7 +33,7 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
 
   if (!userId) {
     logger.warn(
-      `Socket ${socket.id} attempting to use messaging without user ID`
+      `Socket ${socket.id} attempting to use messaging without user ID`,
     );
     socket.disconnect(true);
     return;
@@ -108,7 +108,7 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
             const { chats, total } = await ChatService.getUserChats(
               participant.id,
               1,
-              20
+              20,
             );
 
             // Emit detailed chats to all their connected devices
@@ -125,7 +125,7 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
           } catch (error) {
             logger.error(
               `Error fetching chats for user ${participant.id}:`,
-              error
+              error,
             );
           }
         }
@@ -140,7 +140,7 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
           if (userStatus.status !== "online") {
             // In a real implementation, queue a push notification here
             logger.debug(
-              `Queuing push notification for offline user ${participant.id}`
+              `Queuing push notification for offline user ${participant.id}`,
             );
           }
         }
@@ -256,7 +256,7 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
           error: "Failed to edit message",
         });
       }
-    }
+    },
   );
 
   // Handle message deletion
@@ -304,7 +304,7 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
  * @returns Date or undefined if no auto-delete is needed
  */
 function calculateAutoDeleteTime(
-  retentionPeriod: MessageRetentionPeriod
+  retentionPeriod: MessageRetentionPeriod,
 ): Date | undefined {
   const now = new Date();
 

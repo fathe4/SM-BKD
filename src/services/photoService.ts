@@ -45,14 +45,14 @@ export const getPhotosByPostId = asyncHandler(
     handleDatabaseError(error, "Failed to fetch photos");
     return data as Photo[];
   },
-  "Failed to get photos"
+  "Failed to get photos",
 );
 
 export const getPhotosByUserId = asyncHandler(
   async (
     userId: string,
     page = 1,
-    limit = 20
+    limit = 20,
   ): Promise<{ data: { photos: Photo[] }; total: number }> => {
     const offset = (page - 1) * limit;
 
@@ -69,7 +69,7 @@ export const getPhotosByUserId = asyncHandler(
       total: count || 0,
     };
   },
-  "Failed to get user photos"
+  "Failed to get user photos",
 );
 
 export const createPhoto = asyncHandler(
@@ -83,7 +83,7 @@ export const createPhoto = asyncHandler(
     handleDatabaseError(error, "Failed to create photo");
     return data as Photo;
   },
-  "Failed to create photo"
+  "Failed to create photo",
 );
 
 export const deletePhoto = asyncHandler(
@@ -114,14 +114,14 @@ export const deletePhoto = asyncHandler(
 
     handleDatabaseError(deleteError, "Failed to delete photo");
   },
-  "Failed to delete photo"
+  "Failed to delete photo",
 );
 
 export const updatePhoto = asyncHandler(
   async (
     photoId: string,
     userId: string,
-    updates: Partial<PhotoCreate>
+    updates: Partial<PhotoCreate>,
   ): Promise<Photo> => {
     // First verify the photo belongs to a post owned by the user
     const { data: photo, error: fetchError } = await supabase
@@ -152,5 +152,5 @@ export const updatePhoto = asyncHandler(
     handleDatabaseError(updateError, "Failed to update photo");
     return data as Photo;
   },
-  "Failed to update photo"
+  "Failed to update photo",
 );

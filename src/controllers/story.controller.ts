@@ -4,7 +4,7 @@ import { AuthenticatedRequest } from "../types/request";
 
 export const createStoryHandler = async (
   req: AuthenticatedRequest,
-  res: Response
+  res: Response,
 ) => {
   try {
     console.log(req.user, "req.user");
@@ -50,7 +50,7 @@ export const getStoryByIdHandler = async (req: Request, res: Response) => {
 
 export const deleteStoryHandler = async (
   req: AuthenticatedRequest,
-  res: Response
+  res: Response,
 ) => {
   try {
     if (!req.user) {
@@ -79,7 +79,7 @@ export const deleteStoryHandler = async (
 
 export const viewStoryHandler = async (
   req: AuthenticatedRequest,
-  res: Response
+  res: Response,
 ) => {
   try {
     if (!req.user) {

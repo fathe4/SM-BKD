@@ -24,8 +24,8 @@ const mediaFileFilter = (req: any, file: any, cb: any) => {
   } else {
     cb(
       new Error(
-        `Invalid file type. Allowed types: ${allowedMediaTypes.join(", ")}`
-      )
+        `Invalid file type. Allowed types: ${allowedMediaTypes.join(", ")}`,
+      ),
     );
   }
 };

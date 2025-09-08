@@ -21,7 +21,7 @@ router.post(
   authenticate,
   validateCreateListing,
   checkActiveSubscription,
-  marketplaceController.createListing
+  marketplaceController.createListing,
 );
 
 /**
@@ -32,7 +32,7 @@ router.get(
   "/mine",
   authenticate,
   checkActiveSubscription,
-  marketplaceController.getMyListings
+  marketplaceController.getMyListings,
 );
 
 /**
@@ -55,7 +55,7 @@ router.put(
   "/:id",
   authenticate,
   validateCreateListing,
-  marketplaceController.updateListing
+  marketplaceController.updateListing,
 );
 
 /**

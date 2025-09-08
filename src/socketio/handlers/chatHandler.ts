@@ -11,7 +11,7 @@ export function chatHandler(io: SocketIOServer, socket: Socket): void {
 
   if (!userId) {
     logger.warn(
-      `Socket ${socket.id} attempting to use chat functions without user ID`
+      `Socket ${socket.id} attempting to use chat functions without user ID`,
     );
     socket.disconnect(true);
     return;
@@ -33,7 +33,7 @@ export function chatHandler(io: SocketIOServer, socket: Socket): void {
         const { chats, total } = await ChatService.getUserChats(
           userId,
           page,
-          limit
+          limit,
         );
 
         logger.debug(`Emitting ${chats.length} latest chats to user ${userId}`);
@@ -52,7 +52,7 @@ export function chatHandler(io: SocketIOServer, socket: Socket): void {
           error: "Failed to fetch latest chats",
         });
       }
-    }
+    },
   );
 
   // Handle typing status in chat
@@ -74,11 +74,11 @@ export function chatHandler(io: SocketIOServer, socket: Socket): void {
         logger.debug(
           `User ${userId} ${
             isTyping ? "is typing" : "stopped typing"
-          } in chat ${chatId}`
+          } in chat ${chatId}`,
         );
       } catch (error) {
         logger.error("Error processing typing status:", error);
       }
-    }
+    },
   );
 }

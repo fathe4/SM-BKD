@@ -20,7 +20,7 @@ export class UserService {
    * Create a new user
    */
   static async createUser(
-    userData: Omit<User, "id" | "created_at" | "updated_at">
+    userData: Omit<User, "id" | "created_at" | "updated_at">,
   ): Promise<User> {
     try {
       const { data, error } = await supabaseAdmin!
@@ -47,7 +47,7 @@ export class UserService {
    * Find a user by username with profile data in a single query
    */
   static async findUserByUsernameWithProfile(
-    username: string
+    username: string,
   ): Promise<any | null> {
     try {
       // Find the user and their profile in a single query
@@ -65,7 +65,7 @@ export class UserService {
             location, 
             is_verified,
             profiles(*)
-          `
+          `,
         )
         .eq("username", username)
         .single();
@@ -200,7 +200,7 @@ export class UserService {
    * Create or update a user profile
    */
   static async upsertProfile(
-    profileData: Omit<Profile, "id" | "created_at" | "updated_at">
+    profileData: Omit<Profile, "id" | "created_at" | "updated_at">,
   ): Promise<Profile> {
     try {
       // Check if profile exists
@@ -287,7 +287,7 @@ export class UserService {
    */
   static async createFriendship(
     requesterId: string,
-    addresseeId: string
+    addresseeId: string,
   ): Promise<Friendship> {
     try {
       // Check if a friendship already exists in either direction
@@ -306,7 +306,7 @@ export class UserService {
       if (existingFriendship) {
         throw new AppError(
           "A friendship already exists between these users",
-          400
+          400,
         );
       }
 
@@ -339,7 +339,7 @@ export class UserService {
    */
   static async updateFriendshipStatus(
     friendshipId: string,
-    status: "pending" | "accepted" | "rejected" | "blocked"
+    status: "pending" | "accepted" | "rejected" | "blocked",
   ): Promise<Friendship> {
     try {
       const { data, error } = await supabaseAdmin!
@@ -367,7 +367,7 @@ export class UserService {
    * Register a user device
    */
   static async registerUserDevice(
-    deviceData: Omit<UserDevice, "id" | "created_at" | "updated_at">
+    deviceData: Omit<UserDevice, "id" | "created_at" | "updated_at">,
   ): Promise<UserDevice> {
     try {
       // Check if device already exists
@@ -436,7 +436,7 @@ export class UserService {
     deviceToken: string,
     updateData: Partial<
       Omit<UserDevice, "id" | "user_id" | "device_token" | "created_at">
-    >
+    >,
   ): Promise<UserDevice | null> {
     try {
       // Find the device first
@@ -454,7 +454,7 @@ export class UserService {
 
       if (!existingDevice) {
         logger.warn(
-          `Device not found for user ${userId} with token ${deviceToken}`
+          `Device not found for user ${userId} with token ${deviceToken}`,
         );
         return null;
       }
@@ -485,7 +485,7 @@ export class UserService {
    * Track a user's location
    */
   static async trackUserLocation(
-    locationData: Omit<UserLocation, "id" | "created_at" | "updated_at">
+    locationData: Omit<UserLocation, "id" | "created_at" | "updated_at">,
   ): Promise<UserLocation> {
     try {
       // Format coordinates for PostGIS
@@ -522,7 +522,7 @@ export class UserService {
    */
   static async updateProfilePicture(
     userId: string,
-    fileResult: FileUploadResult
+    fileResult: FileUploadResult,
   ): Promise<User> {
     try {
       // Get the current user to check if they have an existing profile picture
@@ -700,7 +700,7 @@ export class UserService {
       // Apply search filter if provided
       if (search) {
         query = query.or(
-          `first_name.ilike.%${search}%,last_name.ilike.%${search}%,username.ilike.%${search}%,email.ilike.%${search}%`
+          `first_name.ilike.%${search}%,last_name.ilike.%${search}%,username.ilike.%${search}%,email.ilike.%${search}%`,
         );
       }
 
@@ -752,7 +752,7 @@ export class UserService {
    */
   static async updateProfilePictureUrl(
     userId: string,
-    pictureUrl: string
+    pictureUrl: string,
   ): Promise<User> {
     try {
       // Get the current user to check if they exist
@@ -831,7 +831,7 @@ export class UserService {
    */
   static async updateCoverPictureUrl(
     userId: string,
-    pictureUrl: string
+    pictureUrl: string,
   ): Promise<User> {
     try {
       // Get the current user to check if they exist

@@ -24,7 +24,7 @@ export class CommentService {
   static uploadCommentMedia = asyncHandler(
     async (
       files: Express.Multer.File[],
-      userId: string
+      userId: string,
     ): Promise<CommentMedia[]> => {
       if (!files || files.length === 0) {
         return [];
@@ -37,7 +37,7 @@ export class CommentService {
         const uploadResult = await StorageService.uploadFile(
           "comment-media",
           file,
-          userId // Use user ID as folder name
+          userId, // Use user ID as folder name
         );
 
         // Add the media item to the array
@@ -49,7 +49,7 @@ export class CommentService {
 
       return mediaItems;
     },
-    "Failed to upload comment media"
+    "Failed to upload comment media",
   );
   /**
    * Create a new comment
@@ -58,12 +58,12 @@ export class CommentService {
   static createComment = asyncHandler(
     async (
       commentData: CommentCreate,
-      files?: Express.Multer.File[]
+      files?: Express.Multer.File[],
     ): Promise<Comment> => {
       // Check if post exists and is accessible to the user
       const post = await PostService.getPostById(
         commentData.post_id.toString(),
-        commentData.user_id.toString()
+        commentData.user_id.toString(),
       );
 
       if (!post) {
@@ -73,7 +73,7 @@ export class CommentService {
       // If it's a reply, verify parent comment exists
       if (commentData.parent_id) {
         const parentComment = await this.getCommentById(
-          commentData.parent_id.toString()
+          commentData.parent_id.toString(),
         );
 
         if (!parentComment) {
@@ -86,7 +86,7 @@ export class CommentService {
         ) {
           throw new AppError(
             "Parent comment does not belong to this post",
-            400
+            400,
           );
         }
       }
@@ -100,7 +100,7 @@ export class CommentService {
       if (files && files.length > 0) {
         const uploadedMedia = await this.uploadCommentMedia(
           files,
-          commentData.user_id.toString()
+          commentData.user_id.toString(),
         );
         media = [...media, ...uploadedMedia];
       }
@@ -137,7 +137,7 @@ export class CommentService {
 
       return data as Comment;
     },
-    "Failed to create comment"
+    "Failed to create comment",
   );
   /**
    * Get a comment by ID
@@ -160,7 +160,7 @@ export class CommentService {
 
       return data as Comment;
     },
-    "Failed to get comment"
+    "Failed to get comment",
   );
 
   /**
@@ -172,7 +172,7 @@ export class CommentService {
       postId: string,
       page = 1,
       limit = 20,
-      includeReplies = true
+      includeReplies = true,
     ): Promise<{ comments: Comment[]; total: number }> => {
       const offset = (page - 1) * limit;
 
@@ -230,7 +230,7 @@ export class CommentService {
         total: count || 0,
       };
     },
-    "Failed to get post comments"
+    "Failed to get post comments",
   );
 
   /**
@@ -240,7 +240,7 @@ export class CommentService {
     async (
       commentId: string,
       page = 1,
-      limit = 20
+      limit = 20,
     ): Promise<{ replies: Comment[]; total: number }> => {
       const offset = (page - 1) * limit;
 
@@ -261,7 +261,7 @@ export class CommentService {
         total: count || 0,
       };
     },
-    "Failed to get comment replies"
+    "Failed to get comment replies",
   );
 
   // Also modify the updateComment method to handle file uploads
@@ -270,7 +270,7 @@ export class CommentService {
       commentId: string,
       userId: string,
       updateData: CommentUpdate,
-      files?: Express.Multer.File[]
+      files?: Express.Multer.File[],
     ): Promise<Comment> => {
       // First check if comment exists and belongs to user
       const { error: commentError } = await supabase
@@ -316,7 +316,7 @@ export class CommentService {
 
       return data as Comment;
     },
-    "Failed to update comment"
+    "Failed to update comment",
   );
   /**
    * Delete a comment (soft delete)
@@ -325,7 +325,7 @@ export class CommentService {
     async (
       commentId: string,
       userId: string,
-      isAdmin = false
+      isAdmin = false,
     ): Promise<void> => {
       // First check if comment exists
       const { error: commentError } = await supabase
@@ -355,7 +355,7 @@ export class CommentService {
         throw new AppError(error.message, 400);
       }
     },
-    "Failed to delete comment"
+    "Failed to delete comment",
   );
 
   /**
@@ -375,6 +375,6 @@ export class CommentService {
 
       return count || 0;
     },
-    "Failed to get comment count"
+    "Failed to get comment count",
   );
 }

@@ -9,7 +9,14 @@
     "build": "tsc",
     "pull-types": "npx supabase@latest gen types typescript --project-id wvtttpjptmuzdtorhoer > src/types/supabase.ts",
     "lint": "eslint . --ext .ts",
-    "test": "mocha -r ts-node/register 'tests/**/*.test.ts'",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:feed": "jest tests/feed.test.ts",
+    "test:feed:watch": "jest tests/feed.test.ts --watch",
+    "test:feed:coverage": "jest tests/feed.test.ts --coverage",
+    "test:feed:ci": "jest tests/feed.test.ts --ci --coverage --maxWorkers=2",
+    "test:mocha": "mocha -r ts-node/register 'tests/**/*.test.ts'",
     "db:setup": "ts-node src/scripts/setupDatabase.ts",
     "seed": "ts-node src/scripts/seed.ts",
     "migrate:privacy-settings": "ts-node src/scripts/migrations/addUserPrivacySettingsTable.ts"
@@ -53,6 +60,7 @@
     "@typescript-eslint/parser": "^6.13.1",
     "chai": "^5.2.0",
     "eslint": "^8.55.0",
+    "eslint-config-prettier": "^10.1.8",
     "jest": "^29.7.0",
     "mocha": "^11.1.0",
     "nodemon": "^3.0.2",
@@ -91,54 +99,6 @@
         "useESM": true
       }
     ]
-  },
-  "extensionsToTreatAsEsm": [
-    ".ts"
-  ],
-  "moduleNameMapper": {
-    "^(\\.{1,2}/.*)\\.js$": "$1"
-  },
-  "collectCoverage": true,
-  "coverageDirectory": "coverage",
-  "collectCoverageFrom": [
-    "src/**/*.ts",
-    "!src/types/**/*.ts"
-  ],
-  "jest": {
-    "preset": "ts-jest",
-    "testEnvironment": "node",
-    "moduleFileExtensions": [
-      "ts",
-      "js",
-      "json"
-    ],
-    "transform": {
-      "^.+\\.ts$": "ts-jest"
-    },
-    "testMatch": [
-      "**/tests/**/*.test.ts"
-    ],
-    "moduleNameMapper": {
-      "^@/(.*)$": "<rootDir>/src/$1"
-    },
-    "setupFilesAfterEnv": [
-      "./tests/setup.ts"
-    ],
-    "testPathIgnorePatterns": [
-      "/node_modules/",
-      "/dist/"
-    ],
-    "collectCoverage": true,
-    "coverageDirectory": "coverage",
-    "collectCoverageFrom": [
-      "src/**/*.ts",
-      "!src/types/**/*.ts"
-    ],
-    "globals": {
-      "ts-jest": {
-        "tsconfig": "tsconfig.json"
-      }
-    }
   },
   "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
 }

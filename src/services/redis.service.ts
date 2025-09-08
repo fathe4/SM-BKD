@@ -1,6 +1,28 @@
 import Redis from "ioredis";
 import { AppError } from "../middlewares/errorHandler";
 
+// Feed-related types for better type safety
+export interface CachedPost {
+  id: string;
+  content: string;
+  user_id: string;
+  created_at: string;
+  [key: string]: any; // For flexibility with additional fields
+}
+
+export interface CachedFeedResult {
+  posts: CachedPost[];
+  total: number;
+  page: number;
+  hasMore: boolean;
+}
+
+export interface UserLocation {
+  city: string | null;
+  country: string | null;
+  coordinates?: any;
+}
+
 // interface RedisConfig {
 //   host: string;
 //   port: number;
@@ -21,8 +43,17 @@ class RedisService {
     UNREAD_COUNT: 30, // 30 seconds
     RECENT_MESSAGES: 120, // 2 minutes
     USER_PARTICIPANTS: 300, // 5 minutes
+
+    // Feed system TTLs
+    USER_FEED: 300, // 5 minutes (main feed cache)
+    USER_LOCATION: 3600, // 1 hour (location doesn't change often)
+    USER_FRIENDS: 1800, // 30 minutes (friends list)
+    LOCATION_POSTS: 600, // 10 minutes (location posts change less frequently)
+    BOOSTED_POSTS: 180, // 3 minutes (boosted posts need fresher data)
+    POPULAR_POSTS: 900, // 15 minutes (popular posts change slowly)
+    SEEN_BOOSTS: 86400, // 24 hours (deduplication tracking)
+    FEED_ENGAGEMENT: 86400, // 24 hours (analytics)
   };
-    
 
   /**
    * Initialize Redis connection
@@ -34,9 +65,11 @@ class RedisService {
     // }
     const redisUrl = process.env.REDIS_URL;
     if (!redisUrl) {
-      throw new AppError("REDIS_URL is not defined in environment variables", 400);
+      throw new AppError(
+        "REDIS_URL is not defined in environment variables",
+        400,
+      );
     }
-
 
     // const defaultConfig: RedisConfig = {
     //   host: process.env.REDIS_HOST || "localhost",
@@ -103,6 +136,7 @@ class RedisService {
   // ============= CACHE KEY GENERATORS =============
 
   keys = {
+    // Chat system keys
     chatList: (userId: string) => `chat:list:${userId}`,
     chatSummary: (chatId: string) => `chat:summary:${chatId}`,
     directChat: (userA: string, userB: string) => {
@@ -115,6 +149,33 @@ class RedisService {
     recentMessages: (chatId: string) => `messages:recent:${chatId}`,
     chatParticipants: (chatId: string) => `chat:participants:${chatId}`,
     userChatsTotal: (userId: string) => `chat:total:${userId}`,
+
+    // Feed system keys
+    userFeed: (userId: string, page: number) => `feed:user:${userId}:${page}`,
+    userLocation: (userId: string) => `location:${userId}`,
+    userFriends: (userId: string) => `friends:${userId}`,
+
+    // Boosted posts by location
+    boostedPosts: (country: string) => `boosted:${country}`,
+    globalBoostedPosts: () => "boosted:global",
+
+    // Location-based posts
+    locationPosts: (city: string, country: string, page: number) =>
+      `posts:location:${city}:${country}:${page}`,
+
+    // Friends posts
+    friendsPosts: (userId: string, page: number) =>
+      `posts:friends:${userId}:${page}`,
+
+    // Popular posts fallback
+    popularPosts: (page: number) => `posts:popular:${page}`,
+
+    // Deduplication tracking
+    userSeenBoosts: (userId: string) => `seen:boosts:${userId}`,
+
+    // Analytics (optional)
+    feedEngagement: (userId: string, date: string) =>
+      `analytics:feed:${userId}:${date}`,
   };
 
   // ============= GENERIC CACHE OPERATIONS =============
@@ -184,6 +245,212 @@ class RedisService {
     }
   }
 
+  // ============= FEED-SPECIFIC CACHE OPERATIONS =============
+
+  /**
+   * Cache user's feed for a specific page
+   */
+  async setUserFeed(
+    userId: string,
+    page: number,
+    feedResult: CachedFeedResult | CachedPost[],
+  ): Promise<void> {
+    const key = this.keys.userFeed(userId, page);
+    await this.set(key, feedResult, this.TTL.USER_FEED);
+  }
+
+  /**
+   * Get cached user feed for a specific page
+   */
+  async getUserFeed(
+    userId: string,
+    page: number,
+  ): Promise<CachedFeedResult | CachedPost[] | null> {
+    const key = this.keys.userFeed(userId, page);
+    return this.get<CachedFeedResult | CachedPost[]>(key);
+  }
+
+  /**
+   * Cache user location data
+   */
+  async setUserLocation(userId: string, location: UserLocation): Promise<void> {
+    const key = this.keys.userLocation(userId);
+    await this.set(key, location, this.TTL.USER_LOCATION);
+  }
+
+  /**
+   * Get cached user location
+   */
+  async getUserLocation(userId: string): Promise<UserLocation | null> {
+    const key = this.keys.userLocation(userId);
+    return this.get<UserLocation>(key);
+  }
+
+  /**
+   * Cache user's friends list
+   */
+  async setUserFriends(userId: string, friendIds: string[]): Promise<void> {
+    const key = this.keys.userFriends(userId);
+    await this.set(key, friendIds, this.TTL.USER_FRIENDS);
+  }
+
+  /**
+   * Get cached user friends list
+   */
+  async getUserFriends(userId: string): Promise<string[] | null> {
+    const key = this.keys.userFriends(userId);
+    return this.get<string[]>(key);
+  }
+
+  /**
+   * Cache boosted posts for a specific location
+   */
+  async setBoostedPosts(country: string, posts: CachedPost[]): Promise<void> {
+    const key = this.keys.boostedPosts(country);
+    await this.set(key, posts, this.TTL.BOOSTED_POSTS);
+  }
+
+  /**
+   * Get cached boosted posts for a location
+   */
+  async getBoostedPosts(country: string): Promise<CachedPost[] | null> {
+    const key = this.keys.boostedPosts(country);
+    return this.get<CachedPost[]>(key);
+  }
+
+  /**
+   * Cache global boosted posts
+   */
+  async setGlobalBoostedPosts(posts: CachedPost[]): Promise<void> {
+    const key = this.keys.globalBoostedPosts();
+    await this.set(key, posts, this.TTL.BOOSTED_POSTS);
+  }
+
+  /**
+   * Get cached global boosted posts
+   */
+  async getGlobalBoostedPosts(): Promise<CachedPost[] | null> {
+    const key = this.keys.globalBoostedPosts();
+    return this.get<CachedPost[]>(key);
+  }
+
+  /**
+   * Add a boosted post to user's seen list (for deduplication)
+   */
+  async addSeenBoost(userId: string, postId: string): Promise<void> {
+    const key = this.keys.userSeenBoosts(userId);
+    const seenPosts = (await this.get<string[]>(key)) || [];
+
+    if (!seenPosts.includes(postId)) {
+      seenPosts.push(postId);
+      // Keep only last 100 seen posts to prevent unlimited growth
+      const limitedSeen = seenPosts.slice(-100);
+      await this.set(key, limitedSeen, this.TTL.SEEN_BOOSTS);
+    }
+  }
+
+  /**
+   * Get list of boosted posts user has already seen
+   */
+  async getSeenBoosts(userId: string): Promise<string[]> {
+    const key = this.keys.userSeenBoosts(userId);
+    return (await this.get<string[]>(key)) || [];
+  }
+
+  /**
+   * Cache location-based posts
+   */
+  async setLocationPosts(
+    city: string,
+    country: string,
+    page: number,
+    posts: CachedPost[],
+  ): Promise<void> {
+    const key = this.keys.locationPosts(city, country, page);
+    await this.set(key, posts, this.TTL.LOCATION_POSTS);
+  }
+
+  /**
+   * Get cached location-based posts
+   */
+  async getLocationPosts(
+    city: string,
+    country: string,
+    page: number,
+  ): Promise<CachedPost[] | null> {
+    const key = this.keys.locationPosts(city, country, page);
+    return this.get<CachedPost[]>(key);
+  }
+
+  /**
+   * Cache friends posts for a user
+   */
+  async setFriendsPosts(
+    userId: string,
+    page: number,
+    posts: CachedPost[],
+  ): Promise<void> {
+    const key = this.keys.friendsPosts(userId, page);
+    await this.set(key, posts, this.TTL.LOCATION_POSTS);
+  }
+
+  /**
+   * Get cached friends posts
+   */
+  async getFriendsPosts(
+    userId: string,
+    page: number,
+  ): Promise<CachedPost[] | null> {
+    const key = this.keys.friendsPosts(userId, page);
+    return this.get<CachedPost[]>(key);
+  }
+
+  /**
+   * Cache popular posts
+   */
+  async setPopularPosts(page: number, posts: CachedPost[]): Promise<void> {
+    const key = this.keys.popularPosts(page);
+    await this.set(key, posts, this.TTL.POPULAR_POSTS);
+  }
+
+  /**
+   * Get cached popular posts
+   */
+  async getPopularPosts(page: number): Promise<CachedPost[] | null> {
+    const key = this.keys.popularPosts(page);
+    return this.get<CachedPost[]>(key);
+  }
+
+  /**
+   * Invalidate all feed caches for a specific user
+   */
+  async invalidateUserFeed(userId: string): Promise<void> {
+    await this.deletePattern(`feed:user:${userId}:*`);
+    await this.deletePattern(`posts:friends:${userId}:*`);
+  }
+
+  /**
+   * Invalidate location-based feed caches
+   */
+  async invalidateLocationFeeds(city: string, country: string): Promise<void> {
+    await this.deletePattern(`posts:location:${city}:${country}:*`);
+    await this.delete(this.keys.boostedPosts(country));
+  }
+
+  /**
+   * Invalidate all boosted post caches
+   */
+  async invalidateBoostedPosts(): Promise<void> {
+    await this.deletePattern("boosted:*");
+  }
+
+  /**
+   * Invalidate popular posts cache
+   */
+  async invalidatePopularPosts(): Promise<void> {
+    await this.deletePattern("posts:popular:*");
+  }
+
   // ============= CHAT-SPECIFIC CACHE OPERATIONS =============
 
   /**
@@ -192,7 +459,7 @@ class RedisService {
   async setChatList(
     userId: string,
     chats: any[],
-    total: number
+    total: number,
   ): Promise<void> {
     const key = this.keys.chatList(userId);
     const totalKey = this.keys.userChatsTotal(userId);
@@ -205,7 +472,7 @@ class RedisService {
    * Get cached chat list
    */
   async getChatList(
-    userId: string
+    userId: string,
   ): Promise<{ chats: any[]; total: number } | null> {
     const key = this.keys.chatList(userId);
     const totalKey = this.keys.userChatsTotal(userId);
@@ -241,7 +508,7 @@ class RedisService {
   async setDirectChat(
     userA: string,
     userB: string,
-    chatId: string | null
+    chatId: string | null,
   ): Promise<void> {
     const key = this.keys.directChat(userA, userB);
     await this.set(key, chatId, this.TTL.DIRECT_CHAT);
@@ -314,17 +581,17 @@ class RedisService {
     await this.delete(
       this.keys.chatSummary(chatId),
       this.keys.recentMessages(chatId),
-      this.keys.chatParticipants(chatId)
+      this.keys.chatParticipants(chatId),
     );
 
     // Also invalidate chat lists for all participants
     // This requires getting participants first
     const participants = await this.get<string[]>(
-      this.keys.chatParticipants(chatId)
+      this.keys.chatParticipants(chatId),
     );
     if (participants) {
       await Promise.all(
-        participants.map((userId) => this.delete(this.keys.chatList(userId)))
+        participants.map((userId) => this.delete(this.keys.chatList(userId))),
       );
     }
   }

@@ -41,7 +41,7 @@ export class NotificationService {
 
       return data as Notification;
     },
-    "Failed to create notification"
+    "Failed to create notification",
   );
 
   /**
@@ -51,7 +51,7 @@ export class NotificationService {
     async (
       userId: string,
       page = 1,
-      limit = 20
+      limit = 20,
     ): Promise<{ notifications: Notification[]; total: number }> => {
       const offset = (page - 1) * limit;
 
@@ -68,7 +68,7 @@ export class NotificationService {
             profile_picture
           )
         `,
-          { count: "exact" }
+          { count: "exact" },
         )
         .eq("user_id", userId)
         .order("created_at", { ascending: false })
@@ -83,7 +83,7 @@ export class NotificationService {
         total: count || 0,
       };
     },
-    "Failed to get user notifications"
+    "Failed to get user notifications",
   );
 
   /**
@@ -105,7 +105,7 @@ export class NotificationService {
 
       return data as Notification;
     },
-    "Failed to mark notification as read"
+    "Failed to mark notification as read",
   );
 
   /**
@@ -142,7 +142,7 @@ export class NotificationService {
 
       return count || 0;
     },
-    "Failed to get unread notification count"
+    "Failed to get unread notification count",
   );
 
   /**
@@ -160,7 +160,7 @@ export class NotificationService {
         throw new AppError(error.message, 400);
       }
     },
-    "Failed to delete notification"
+    "Failed to delete notification",
   );
 
   /**
@@ -177,6 +177,6 @@ export class NotificationService {
         throw new AppError(error.message, 400);
       }
     },
-    "Failed to delete all notifications"
+    "Failed to delete all notifications",
   );
 }

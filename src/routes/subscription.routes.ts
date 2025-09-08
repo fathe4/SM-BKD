@@ -11,7 +11,7 @@ router.get("/tiers", SubscriptionController.getSubscriptionTiers);
 router.get(
   "/status",
   authenticate,
-  SubscriptionController.getUserSubscriptionStatus
+  SubscriptionController.getUserSubscriptionStatus,
 );
 
 export default router;

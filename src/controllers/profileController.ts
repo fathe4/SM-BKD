@@ -185,9 +185,8 @@ export class ProfileController {
         throw new AppError("Username is required", 400);
       }
 
-      const userData = await UserService.findUserByUsernameWithProfile(
-        username
-      );
+      const userData =
+        await UserService.findUserByUsernameWithProfile(username);
 
       if (!userData) {
         throw new AppError("User not found", 404);

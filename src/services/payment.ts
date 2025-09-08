@@ -22,7 +22,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 async function _createCheckoutSession(
   payment: Tables<"payments">,
   successUrl: string,
-  cancelUrl: string
+  cancelUrl: string,
 ): Promise<Stripe.Checkout.Session> {
   // Use the user's email for the Stripe customer.
   const { data: user, error: userError } = await supabase
@@ -82,7 +82,7 @@ export async function createSubscriptionCheckoutSession(
   userId: string,
   tierId: string,
   successUrl: string,
-  cancelUrl: string
+  cancelUrl: string,
 ): Promise<Stripe.Checkout.Session> {
   const { data: tier, error: tierError } = await supabase
     .from("subscription_tiers")
@@ -132,7 +132,7 @@ export async function createPostBoostCheckoutSession(
   userId: string,
   boostId: string,
   successUrl: string,
-  cancelUrl: string
+  cancelUrl: string,
 ): Promise<Stripe.Checkout.Session> {
   const { data: boost, error: boostError } = await supabase
     .from("post_boosts")
@@ -183,7 +183,7 @@ export const handleStripeWebhook = async (body: Buffer, signature: string) => {
 
   if (!webhookSecret) {
     console.error(
-      "[StripeWebhook] ERROR: Stripe webhook secret is not configured"
+      "[StripeWebhook] ERROR: Stripe webhook secret is not configured",
     );
     throw new Error("Stripe webhook secret is not configured");
   }
@@ -194,18 +194,18 @@ export const handleStripeWebhook = async (body: Buffer, signature: string) => {
   try {
     const bodyString = body.toString("utf8");
     console.log(
-      "[StripeWebhook] HACK: Skipping signature verification, parsing body directly"
+      "[StripeWebhook] HACK: Skipping signature verification, parsing body directly",
     );
     event = JSON.parse(bodyString) as Stripe.Event;
     console.log(
       "[StripeWebhook] Event parsed directly:",
       event?.id,
-      event?.type
+      event?.type,
     );
   } catch (parseError: any) {
     console.error(
       "[StripeWebhook] ERROR: Failed to parse webhook body as JSON:",
-      parseError.message
+      parseError.message,
     );
 
     // Fallback: Try signature verification anyway
@@ -214,12 +214,12 @@ export const handleStripeWebhook = async (body: Buffer, signature: string) => {
       console.log(
         "[StripeWebhook] Event constructed via fallback:",
         event?.id,
-        event?.type
+        event?.type,
       );
     } catch (err: any) {
       console.error(
         "[StripeWebhook] ERROR: Both direct parsing and signature verification failed:",
-        err.message
+        err.message,
       );
       throw new Error(`Webhook processing failed: ${err.message}`);
     }
@@ -236,7 +236,7 @@ export const handleStripeWebhook = async (body: Buffer, signature: string) => {
 
     if (!paymentId) {
       console.error(
-        "[StripeWebhook] ERROR: Payment ID not found in checkout session metadata"
+        "[StripeWebhook] ERROR: Payment ID not found in checkout session metadata",
       );
       throw new Error("Payment ID not found in checkout session metadata");
     }
@@ -251,7 +251,7 @@ export const handleStripeWebhook = async (body: Buffer, signature: string) => {
     if (paymentError || !payment) {
       console.error(
         `[StripeWebhook] ERROR: Payment with ID ${paymentId} not found.`,
-        paymentError
+        paymentError,
       );
       throw new Error(`Payment with ID ${paymentId} not found.`);
     }
@@ -269,10 +269,10 @@ export const handleStripeWebhook = async (body: Buffer, signature: string) => {
 
     if (updateError) {
       console.error(
-        `[StripeWebhook] ERROR: Failed to update payment status: ${updateError.message}`
+        `[StripeWebhook] ERROR: Failed to update payment status: ${updateError.message}`,
       );
       throw new Error(
-        `Failed to update payment status: ${updateError.message}`
+        `Failed to update payment status: ${updateError.message}`,
       );
     }
 
@@ -286,7 +286,7 @@ export const handleStripeWebhook = async (body: Buffer, signature: string) => {
         "[StripeWebhook] Creating user subscription for user:",
         payment.user_id,
         "tier:",
-        payment.reference_id
+        payment.reference_id,
       );
       const { data: tier, error: tierError } = await supabase
         .from("subscription_tiers")
@@ -296,13 +296,13 @@ export const handleStripeWebhook = async (body: Buffer, signature: string) => {
 
       if (tierError || !tier) {
         throw new Error(
-          "Subscription tier not found for user subscription creation."
+          "Subscription tier not found for user subscription creation.",
         );
       }
 
       const startedAt = new Date();
       const expiresAt = new Date(
-        startedAt.getTime() + tier.duration_days * 24 * 60 * 60 * 1000
+        startedAt.getTime() + tier.duration_days * 24 * 60 * 60 * 1000,
       );
 
       const { error: subError } = await supabase
@@ -316,10 +316,10 @@ export const handleStripeWebhook = async (body: Buffer, signature: string) => {
         });
       if (subError) {
         console.error(
-          `[StripeWebhook] ERROR: Failed to create user subscription: ${subError.message}`
+          `[StripeWebhook] ERROR: Failed to create user subscription: ${subError.message}`,
         );
         throw new Error(
-          `Failed to create user subscription: ${subError.message}`
+          `Failed to create user subscription: ${subError.message}`,
         );
       }
     } else if (payment.reference_type === PaymentReferenceType.BOOST) {
@@ -327,7 +327,7 @@ export const handleStripeWebhook = async (body: Buffer, signature: string) => {
         "payment.reference_id",
         payment.reference_id,
         "payment.reference_type",
-        payment.reference_type
+        payment.reference_type,
       );
       // Activate the boost after successful payment
       await PostService.activateBoost(payment.reference_id);
@@ -339,7 +339,7 @@ export const handleStripeWebhook = async (body: Buffer, signature: string) => {
     const subscription = event.data.object as Stripe.Subscription;
     console.log(
       "[StripeWebhook] customer.subscription.updated subscription:",
-      subscription
+      subscription,
     );
     const { error } = await supabase
       .from("user_subscriptions")
@@ -347,7 +347,7 @@ export const handleStripeWebhook = async (body: Buffer, signature: string) => {
       .eq("stripe_subscription_id", subscription.id);
     if (error) {
       console.error(
-        `[StripeWebhook] ERROR: Failed to update subscription status: ${error.message}`
+        `[StripeWebhook] ERROR: Failed to update subscription status: ${error.message}`,
       );
       throw new Error(`Failed to update subscription status: ${error.message}`);
     }
@@ -357,7 +357,7 @@ export const handleStripeWebhook = async (body: Buffer, signature: string) => {
     const subscription = event.data.object as Stripe.Subscription;
     console.log(
       "[StripeWebhook] customer.subscription.deleted subscription:",
-      subscription
+      subscription,
     );
     const { error } = await supabase
       .from("user_subscriptions")
@@ -365,7 +365,7 @@ export const handleStripeWebhook = async (body: Buffer, signature: string) => {
       .eq("stripe_subscription_id", subscription.id);
     if (error) {
       console.error(
-        `[StripeWebhook] ERROR: Failed to cancel subscription: ${error.message}`
+        `[StripeWebhook] ERROR: Failed to cancel subscription: ${error.message}`,
       );
       throw new Error(`Failed to cancel subscription: ${error.message}`);
     }

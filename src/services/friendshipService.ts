@@ -29,7 +29,7 @@ export class FriendshipService {
       // Check if a friendship already exists in either direction
       const existingFriendship = await this.getFriendshipBetweenUsers(
         requesterId,
-        addresseeId
+        addresseeId,
       );
 
       if (existingFriendship) {
@@ -46,7 +46,7 @@ export class FriendshipService {
           // If the current user is the addressee of an existing request, accept the friendship
           return await this.updateFriendshipStatus(
             existingFriendship.id,
-            FriendshipStatus.ACCEPTED
+            FriendshipStatus.ACCEPTED,
           );
         }
 
@@ -58,7 +58,7 @@ export class FriendshipService {
           // Allow re-sending a request if it was previously rejected
           return await this.updateFriendshipStatus(
             existingFriendship.id,
-            FriendshipStatus.PENDING
+            FriendshipStatus.PENDING,
           );
         }
       }
@@ -84,7 +84,7 @@ export class FriendshipService {
 
       return data as Friendship;
     },
-    "Failed to send friend request"
+    "Failed to send friend request",
   );
 
   /**
@@ -96,7 +96,7 @@ export class FriendshipService {
         .from("friendships")
         .select("*")
         .or(
-          `and(requester_id.eq.${userId1},addressee_id.eq.${userId2}),and(requester_id.eq.${userId2},addressee_id.eq.${userId1})`
+          `and(requester_id.eq.${userId1},addressee_id.eq.${userId2}),and(requester_id.eq.${userId2},addressee_id.eq.${userId1})`,
         )
         .maybeSingle();
 
@@ -107,7 +107,7 @@ export class FriendshipService {
 
       return data as Friendship | null;
     },
-    "Failed to get friendship between users"
+    "Failed to get friendship between users",
   );
 
   /**
@@ -116,7 +116,7 @@ export class FriendshipService {
   static updateFriendshipStatus = asyncHandler(
     async (
       friendshipId: string,
-      status: FriendshipStatus
+      status: FriendshipStatus,
     ): Promise<Friendship> => {
       const { data, error } = await supabaseAdmin!
         .from("friendships")
@@ -134,7 +134,7 @@ export class FriendshipService {
 
       return data as Friendship;
     },
-    "Failed to update friendship status"
+    "Failed to update friendship status",
   );
 
   /**
@@ -157,7 +157,7 @@ export class FriendshipService {
 
       return data as Friendship;
     },
-    "Failed to get friendship by ID"
+    "Failed to get friendship by ID",
   );
 
   /**
@@ -174,7 +174,7 @@ export class FriendshipService {
         throw new AppError(error.message, 400);
       }
     },
-    "Failed to delete friendship"
+    "Failed to delete friendship",
   );
 
   /**
@@ -187,7 +187,7 @@ export class FriendshipService {
         status?: FriendshipStatus;
         page?: number;
         limit?: number;
-      } = {}
+      } = {},
     ): Promise<{ friendships: FriendSummary[]; total: number }> => {
       const { status, page = 1, limit = 10 } = options;
       const offset = (page - 1) * limit;
@@ -205,7 +205,7 @@ export class FriendshipService {
           created_at,
           updated_at
         `,
-          { count: "exact" }
+          { count: "exact" },
         )
         .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`);
 
@@ -234,14 +234,14 @@ export class FriendshipService {
             .map((friendship) =>
               friendship.requester_id === userId
                 ? friendship.addressee_id
-                : friendship.requester_id
+                : friendship.requester_id,
             )
-            .filter((id) => id && id !== userId)
+            .filter((id) => id && id !== userId),
         ),
       ];
       const profiles = await getMultipleUserProfiles(otherUserIds);
       const profileMap = Object.fromEntries(
-        profiles.map((profile) => [profile.id, profile])
+        profiles.map((profile) => [profile.id, profile]),
       );
 
       const friendshipSummaries = data.map((friendship) => {
@@ -264,7 +264,7 @@ export class FriendshipService {
         total: count || 0,
       };
     },
-    "Failed to get user friendships"
+    "Failed to get user friendships",
   );
 
   /**
@@ -291,10 +291,10 @@ export class FriendshipService {
       return data.map((friendship) =>
         friendship.requester_id === userId
           ? friendship.addressee_id
-          : friendship.requester_id
+          : friendship.requester_id,
       ) as string[];
     },
-    "Failed to get user friend IDs"
+    "Failed to get user friend IDs",
   );
 
   /**
@@ -307,7 +307,7 @@ export class FriendshipService {
         friendship !== null && friendship.status === FriendshipStatus.ACCEPTED
       );
     },
-    "Failed to check if users are friends"
+    "Failed to check if users are friends",
   );
 
   /**
@@ -320,7 +320,7 @@ export class FriendshipService {
       options: {
         page?: number;
         limit?: number;
-      } = {}
+      } = {},
     ): Promise<{ mutualFriends: FriendSummary[]; total: number }> => {
       const { page = 1, limit = 10 } = options;
 
@@ -334,7 +334,7 @@ export class FriendshipService {
 
       // Find mutual friends (intersection of the two arrays)
       const mutualFriendIds = user1FriendIds.filter((id) =>
-        user2FriendIds.includes(id)
+        user2FriendIds.includes(id),
       );
 
       if (mutualFriendIds.length === 0) {
@@ -354,7 +354,7 @@ export class FriendshipService {
           // Get friendship details with the current user
           const friendship = await this.getFriendshipBetweenUsers(
             userId1,
-            friendId
+            friendId,
           );
 
           return {
@@ -366,7 +366,7 @@ export class FriendshipService {
             friendship_id: friendship?.id,
             friendship_status: friendship?.status || FriendshipStatus.ACCEPTED,
           } as FriendSummary;
-        })
+        }),
       );
 
       return {
@@ -374,7 +374,7 @@ export class FriendshipService {
         total: mutualFriendIds.length,
       };
     },
-    "Failed to get mutual friends"
+    "Failed to get mutual friends",
   );
 
   static getPendingFriendRequestIds = asyncHandler(
@@ -394,12 +394,12 @@ export class FriendshipService {
       const pendingIds = data.map((friendship) =>
         friendship.requester_id === userId
           ? friendship.addressee_id
-          : friendship.requester_id
+          : friendship.requester_id,
       );
 
       return pendingIds;
     },
-    "Failed to get pending friend request IDs"
+    "Failed to get pending friend request IDs",
   );
 
   /**
@@ -412,7 +412,7 @@ export class FriendshipService {
       options: {
         page?: number;
         limit?: number;
-      } = {}
+      } = {},
     ): Promise<{ suggestions: FriendSummary[]; total: number }> => {
       const { page = 1, limit = 10 } = options;
       const offset = (page - 1) * limit;
@@ -425,7 +425,7 @@ export class FriendshipService {
           user_id: userId,
           suggestion_limit: limit,
           suggestion_offset: offset,
-        }
+        },
       );
 
       if (fofError) {
@@ -457,7 +457,7 @@ export class FriendshipService {
           {
             user_id: userId,
             suggestion_limit: randomLimit,
-          }
+          },
         );
 
         if (randomError) {
@@ -482,7 +482,7 @@ export class FriendshipService {
       // Get total count for pagination (single efficient query)
       const { count, error: countError } = await supabase.rpc(
         "get_suggestion_count",
-        { user_id: userId }
+        { user_id: userId },
       );
 
       if (countError) {
@@ -494,18 +494,18 @@ export class FriendshipService {
         total: count || suggestions.length,
       };
     },
-    "Failed to get friend suggestions"
+    "Failed to get friend suggestions",
   );
   static async checkIfUsersAreFriends(
     userId1: UUID,
-    userId2: UUID
+    userId2: UUID,
   ): Promise<boolean> {
     try {
       const { data, error } = await supabase
         .from("friendships")
         .select("status")
         .or(
-          `and(requester_id.eq.${userId1},addressee_id.eq.${userId2}),and(requester_id.eq.${userId2},addressee_id.eq.${userId1})`
+          `and(requester_id.eq.${userId1},addressee_id.eq.${userId2}),and(requester_id.eq.${userId2},addressee_id.eq.${userId1})`,
         )
         .eq("status", FriendshipStatus.ACCEPTED)
         .maybeSingle();
@@ -527,13 +527,13 @@ export class FriendshipService {
    */
   static async checkIfUsersHaveMutualFriends(
     userId1: UUID,
-    userId2: UUID
+    userId2: UUID,
   ): Promise<boolean> {
     try {
       // Get friends of user1
       const { data: user1Friends, error: error1 } = await supabase.rpc(
         "get_user_friends",
-        { user_id: userId1 }
+        { user_id: userId1 },
       );
 
       if (error1) {
@@ -544,7 +544,7 @@ export class FriendshipService {
       // Get friends of user2
       const { data: user2Friends, error: error2 } = await supabase.rpc(
         "get_user_friends",
-        { user_id: userId2 }
+        { user_id: userId2 },
       );
 
       if (error2) {
@@ -554,15 +554,15 @@ export class FriendshipService {
 
       // Check for mutual friends
       const user1FriendIds = user1Friends.map(
-        (friend: any) => friend.friend_id
+        (friend: any) => friend.friend_id,
       );
       const user2FriendIds = user2Friends.map(
-        (friend: any) => friend.friend_id
+        (friend: any) => friend.friend_id,
       );
 
       // Find intersection of friend IDs
       const mutualFriends = user1FriendIds.filter((id: UUID) =>
-        user2FriendIds.includes(id)
+        user2FriendIds.includes(id),
       );
 
       return mutualFriends.length > 0;

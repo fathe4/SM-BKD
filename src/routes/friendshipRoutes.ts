@@ -29,7 +29,7 @@ router.post("/", validateFriendRequest, FriendshipController.sendFriendRequest);
 router.get(
   "/",
   validateFriendshipPagination,
-  FriendshipController.getFriendships
+  FriendshipController.getFriendships,
 );
 
 /**
@@ -47,7 +47,7 @@ router.get("/suggestions", FriendshipController.getFriendSuggestions);
 router.get(
   "/mutual/:userId",
   validateMutualFriendsRequest,
-  FriendshipController.getMutualFriends
+  FriendshipController.getMutualFriends,
 );
 
 /**
@@ -65,7 +65,7 @@ router.get("/:id", validateFriendshipId, FriendshipController.getFriendship);
 router.patch(
   "/:id",
   validateFriendshipStatus,
-  FriendshipController.updateFriendshipStatus
+  FriendshipController.updateFriendshipStatus,
 );
 
 /**
@@ -76,7 +76,7 @@ router.patch(
 router.delete(
   "/:id",
   validateFriendshipId,
-  FriendshipController.deleteFriendship
+  FriendshipController.deleteFriendship,
 );
 
 export default router;

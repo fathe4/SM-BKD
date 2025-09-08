@@ -77,7 +77,7 @@ export function initializeSocketIO(httpServer: HttpServer): SocketIOServer {
 export function getIO(): SocketIOServer {
   if (!io) {
     throw new Error(
-      "Socket.IO has not been initialized. Call initializeSocketIO first."
+      "Socket.IO has not been initialized. Call initializeSocketIO first.",
     );
   }
   return io;

@@ -14,7 +14,7 @@ export class IpLocationService {
     ipAddress: string,
     deviceToken: string,
     deviceType: string,
-    locationData: any
+    locationData: any,
   ): Promise<void> {
     try {
       // Register or update the device first
@@ -46,7 +46,7 @@ export class IpLocationService {
         });
 
         logger.info(
-          `Successfully tracked client-provided location for user ${userId} from ${locationData.location_source}`
+          `Successfully tracked client-provided location for user ${userId} from ${locationData.location_source}`,
         );
       }
     } catch (error) {

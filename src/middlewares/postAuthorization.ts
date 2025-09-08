@@ -12,7 +12,7 @@ import { PostService } from "../services/postService";
  */
 export const canAccessPost = (
   allowPostOwner = true,
-  allowedRoles: UserRole[] = [UserRole.ADMIN]
+  allowedRoles: UserRole[] = [UserRole.ADMIN],
 ) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {

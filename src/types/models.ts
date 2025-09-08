@@ -9,6 +9,7 @@ export interface BaseModel {
 
 // User role types
 export enum UserRole {
+  SUPER_ADMIN = "super_admin",
   ADMIN = "admin",
   MODERATOR = "moderator",
   USER = "user",

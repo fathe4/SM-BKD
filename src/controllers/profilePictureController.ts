@@ -23,7 +23,7 @@ export class ProfilePictureController {
       // Update the user's profile picture URL in the database
       const updatedUser = await UserService.updateProfilePictureUrl(
         userId,
-        pictureUrl
+        pictureUrl,
       );
 
       // Return success response
@@ -34,7 +34,7 @@ export class ProfilePictureController {
           profilePicture: updatedUser.profile_picture,
         },
       });
-    }
+    },
   );
 
   /**
@@ -55,7 +55,7 @@ export class ProfilePictureController {
         status: "success",
         message: "Profile picture removed successfully",
       });
-    }
+    },
   );
 
   /**
@@ -76,7 +76,7 @@ export class ProfilePictureController {
       // Update the user's cover picture URL in the database
       const updatedUser = await UserService.updateCoverPictureUrl(
         userId,
-        pictureUrl
+        pictureUrl,
       );
 
       // Return success response
@@ -87,7 +87,7 @@ export class ProfilePictureController {
           coverPicture: updatedUser.cover_picture,
         },
       });
-    }
+    },
   );
 
   /**
@@ -108,6 +108,6 @@ export class ProfilePictureController {
         status: "success",
         message: "Cover picture removed successfully",
       });
-    }
+    },
   );
 }

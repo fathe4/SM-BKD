@@ -27,15 +27,15 @@ const allowedTypes = [
 const fileFilter = (
   req: any,
   file: Express.Multer.File,
-  cb: multer.FileFilterCallback
+  cb: multer.FileFilterCallback,
 ) => {
   if (allowedTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
     cb(
       new Error(
-        "Invalid file type. Allowed types: images, videos, PDF, and documents"
-      )
+        "Invalid file type. Allowed types: images, videos, PDF, and documents",
+      ),
     );
   }
 };

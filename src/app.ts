@@ -27,6 +27,7 @@ import marketplaceRoutes from "./routes/marketplaceRoutes";
 import storyRoutes from "./routes/story.routes";
 import paymentRoutes from "./routes/payment.route";
 import subscriptionRoutes from "./routes/subscription.routes";
+import transactionRoutes from "./routes/transactionRoutes";
 import { setupMessageRetentionJob } from "./jobs/messageRetentionJob";
 import { redisService } from "./services/redis.service";
 
@@ -54,7 +55,8 @@ initializeSocketIO(server);
 
 const corsOptions = {
   origin: [
-    "http://localhost:3000",
+    "http://localhost:3000", // Frontend client
+    "http://localhost:4200", // Admin dashboard
     "https://dambala.ca",
     // "https://yourdomain.com" // Add your frontend domain
   ],
@@ -129,6 +131,7 @@ app.use(`${apiPrefix}/notifications`, notificationRoutes);
 app.use(`${apiPrefix}/marketplace`, marketplaceRoutes);
 app.use(`${apiPrefix}/stories`, storyRoutes);
 app.use(`${apiPrefix}/subscriptions`, subscriptionRoutes);
+app.use(`${apiPrefix}/transactions`, transactionRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {

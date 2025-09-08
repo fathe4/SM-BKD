@@ -5,7 +5,7 @@ import { FriendshipService } from "../services/friendshipService";
 export async function canSeeOnlineStatus(
   viewerId: UUID,
   targetId: UUID,
-  targetSettings: any
+  targetSettings: any,
 ): Promise<boolean> {
   // Same user can always see their own status
   if (viewerId === targetId) return true;
@@ -27,7 +27,7 @@ export async function canSeeOnlineStatus(
 export async function canSeeLastActive(
   viewerId: UUID,
   targetId: UUID,
-  targetSettings: any
+  targetSettings: any,
 ): Promise<boolean> {
   // Similar to online status but with lastActive setting
   if (viewerId === targetId) return true;
@@ -46,7 +46,7 @@ export async function canSeeLastActive(
 
 export function shouldSendReadReceipt(
   senderSettings: any,
-  recipientSettings: any
+  recipientSettings: any,
 ): boolean {
   // Check both users' read receipt preferences
   return (
