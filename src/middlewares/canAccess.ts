@@ -10,7 +10,7 @@ import { logger } from "../utils/logger";
  */
 export const canAccessProfile = (
   allowSameUser = true,
-  allowedRoles: UserRole[] = [UserRole.ADMIN]
+  allowedRoles: UserRole[] = [UserRole.ADMIN],
 ) => {
   return (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -47,7 +47,7 @@ export const canAccessProfile = (
       // Deny access if neither condition is true
       throw new AppError(
         "You do not have permission to access this profile",
-        403
+        403,
       );
     } catch (error) {
       if (error instanceof AppError) {

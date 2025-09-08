@@ -39,7 +39,7 @@ export class ReactionService {
       const existingReaction = await this.getUserReactionToTarget(
         reactionData.user_id,
         reactionData.target_id,
-        reactionData.target_type
+        reactionData.target_type,
       );
 
       if (existingReaction) {
@@ -52,7 +52,7 @@ export class ReactionService {
         return await this.updateReaction(
           existingReaction.id,
           reactionData.user_id,
-          reactionData.reaction_type
+          reactionData.reaction_type,
         );
       }
 
@@ -71,12 +71,12 @@ export class ReactionService {
       let targetOwnerId: string;
       if (reactionData.target_type === TargetType.POST) {
         const post = await PostService.getPostById(
-          reactionData.target_id.toString()
+          reactionData.target_id.toString(),
         );
         targetOwnerId = post?.user_id ?? "";
       } else {
         const comment = await CommentService.getCommentById(
-          reactionData.target_id.toString()
+          reactionData.target_id.toString(),
         );
         targetOwnerId = comment?.user_id ?? "";
       }
@@ -110,7 +110,7 @@ export class ReactionService {
 
       return data as Reaction;
     },
-    "Failed to create reaction"
+    "Failed to create reaction",
   );
 
   /**
@@ -121,7 +121,7 @@ export class ReactionService {
       targetId: UUID,
       targetType: TargetType,
       page = 1,
-      limit = 50
+      limit = 50,
     ): Promise<{ reactions: Reaction[]; total: number }> => {
       const offset = (page - 1) * limit;
 
@@ -141,7 +141,7 @@ export class ReactionService {
         total: count || 0,
       };
     },
-    "Failed to get reactions for target"
+    "Failed to get reactions for target",
   );
 
   /**
@@ -151,7 +151,7 @@ export class ReactionService {
   static getReactionSummary = asyncHandler(
     async (
       targetId: UUID,
-      targetType: TargetType
+      targetType: TargetType,
     ): Promise<ReactionSummary> => {
       const { data, error } = await supabase
         .from("reactions")
@@ -183,7 +183,7 @@ export class ReactionService {
 
       return summary;
     },
-    "Failed to get reaction summary"
+    "Failed to get reaction summary",
   );
 
   /**
@@ -194,7 +194,7 @@ export class ReactionService {
     async (
       userId: UUID,
       targetId: UUID,
-      targetType: TargetType
+      targetType: TargetType,
     ): Promise<Reaction | null> => {
       const { data, error } = await supabase
         .from("reactions")
@@ -214,7 +214,7 @@ export class ReactionService {
 
       return data as Reaction | null;
     },
-    "Failed to check user reaction"
+    "Failed to check user reaction",
   );
 
   /**
@@ -224,7 +224,7 @@ export class ReactionService {
     async (
       reactionId: UUID,
       userId: UUID,
-      reactionType: ReactionType
+      reactionType: ReactionType,
     ): Promise<Reaction> => {
       // First check if the reaction exists and belongs to the user
       const { error: fetchError } = await supabase
@@ -255,7 +255,7 @@ export class ReactionService {
 
       return data as Reaction;
     },
-    "Failed to update reaction"
+    "Failed to update reaction",
   );
 
   /**
@@ -265,7 +265,7 @@ export class ReactionService {
     async (
       userId: UUID,
       targetId: UUID,
-      targetType: TargetType
+      targetType: TargetType,
     ): Promise<void> => {
       // Delete the reaction if it exists
       const { error } = await supabaseAdmin!
@@ -279,6 +279,6 @@ export class ReactionService {
         throw new AppError(error.message, 400);
       }
     },
-    "Failed to delete user reaction"
+    "Failed to delete user reaction",
   );
 }

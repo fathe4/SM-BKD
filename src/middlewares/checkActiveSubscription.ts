@@ -10,7 +10,7 @@ import { getActiveSubscriptionForUser } from "../services/subscriptionService";
 export const checkActiveSubscription = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const userId = req.user?.id;

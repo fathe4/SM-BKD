@@ -7,7 +7,7 @@ import { ResourceOwnershipChecker } from "../middlewares/resourceAuthorization";
  */
 export const isCommentOwner: ResourceOwnershipChecker = async (
   commentId,
-  userId
+  userId,
 ) => {
   const { data, error } = await supabase
     .from("comments")
@@ -46,7 +46,7 @@ export const isPostOwner: ResourceOwnershipChecker = async (postId, userId) => {
  */
 export const isReactionOwner: ResourceOwnershipChecker = async (
   reactionId,
-  userId
+  userId,
 ) => {
   const { data, error } = await supabase
     .from("reactions")

@@ -7,7 +7,7 @@ import { PrivacySettingsService } from "../services/privacySettingsService";
 
 export async function getRequiredIds(
   req: Request,
-  idFields: string[]
+  idFields: string[],
 ): Promise<Record<string, UUID>> {
   const result: Record<string, UUID> = {};
 
@@ -30,7 +30,7 @@ type PrivacySettings = Awaited<
 >;
 
 export async function getPrivacySettingsForUsers(
-  userIds: UUID[]
+  userIds: UUID[],
 ): Promise<Record<string, PrivacySettings>> {
   const settings: Record<string, PrivacySettings> = {};
 
@@ -46,7 +46,7 @@ export function canUserViewData(
   viewerId: UUID,
   ownerId: UUID,
   visibilityLevel: string,
-  areFriends: boolean
+  areFriends: boolean,
 ): boolean {
   if (viewerId === ownerId) return true;
 

@@ -16,7 +16,7 @@ export class PrivacySettingsService {
    * Get a user's privacy settings
    */
   static async getUserPrivacySettings(
-    userId: UUID
+    userId: UUID,
   ): Promise<UserPrivacySettingsRecord> {
     try {
       // Attempt to fetch the user's privacy settings
@@ -35,7 +35,7 @@ export class PrivacySettingsService {
       if (!data) {
         return await this.createUserPrivacySettings(
           userId,
-          DEFAULT_EXTENDED_PRIVACY_SETTINGS
+          DEFAULT_EXTENDED_PRIVACY_SETTINGS,
         );
       }
 
@@ -53,7 +53,7 @@ export class PrivacySettingsService {
    */
   static async createUserPrivacySettings(
     userId: UUID,
-    settings: ExtendedPrivacySettings = DEFAULT_EXTENDED_PRIVACY_SETTINGS
+    settings: ExtendedPrivacySettings = DEFAULT_EXTENDED_PRIVACY_SETTINGS,
   ): Promise<UserPrivacySettingsRecord> {
     try {
       const { data, error } = await supabaseAdmin!
@@ -84,7 +84,7 @@ export class PrivacySettingsService {
    */
   static async updateUserPrivacySettings(
     userId: UUID,
-    updateData: UserPrivacySettingsUpdate
+    updateData: UserPrivacySettingsUpdate,
   ): Promise<UserPrivacySettingsRecord> {
     try {
       // Get current settings
@@ -127,7 +127,7 @@ export class PrivacySettingsService {
   static async updatePrivacySection(
     userId: UUID,
     section: "baseSettings" | "messageSettings",
-    sectionData: any
+    sectionData: any,
   ): Promise<UserPrivacySettingsRecord> {
     try {
       // Get current settings
@@ -135,7 +135,7 @@ export class PrivacySettingsService {
 
       // Create a deep copy of the current settings
       const updatedSettings = JSON.parse(
-        JSON.stringify(currentSettings.settings)
+        JSON.stringify(currentSettings.settings),
       );
 
       // Update only the specified section
@@ -173,7 +173,7 @@ export class PrivacySettingsService {
    * Reset privacy settings to default values
    */
   static async resetPrivacySettings(
-    userId: UUID
+    userId: UUID,
   ): Promise<UserPrivacySettingsRecord> {
     try {
       const { data, error } = await supabaseAdmin!

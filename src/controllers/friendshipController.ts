@@ -20,7 +20,7 @@ export class FriendshipController {
 
       const friendship = await FriendshipService.sendFriendRequest(
         requesterId,
-        addressee_id
+        addressee_id,
       );
 
       res.status(201).json({
@@ -29,7 +29,7 @@ export class FriendshipController {
           friendship,
         },
       });
-    }
+    },
   );
 
   /**
@@ -46,7 +46,7 @@ export class FriendshipController {
 
       const { friendships, total } = await FriendshipService.getUserFriendships(
         paramUserId ? paramUserId : userId,
-        { status, page, limit }
+        { status, page, limit },
       );
 
       res.status(200).json({
@@ -59,7 +59,7 @@ export class FriendshipController {
           limit,
         },
       });
-    }
+    },
   );
 
   /**
@@ -71,9 +71,8 @@ export class FriendshipController {
       const friendshipId = req.params.id;
       const userId = req.user!.id;
 
-      const friendship = await FriendshipService.getFriendshipById(
-        friendshipId
-      );
+      const friendship =
+        await FriendshipService.getFriendshipById(friendshipId);
 
       if (!friendship) {
         throw new AppError("Friendship not found", 404);
@@ -86,7 +85,7 @@ export class FriendshipController {
       ) {
         throw new AppError(
           "You do not have permission to view this friendship",
-          403
+          403,
         );
       }
 
@@ -96,7 +95,7 @@ export class FriendshipController {
           friendship,
         },
       });
-    }
+    },
   );
 
   /**
@@ -115,9 +114,8 @@ export class FriendshipController {
       }
 
       // Get existing friendship
-      const friendship = await FriendshipService.getFriendshipById(
-        friendshipId
-      );
+      const friendship =
+        await FriendshipService.getFriendshipById(friendshipId);
 
       if (!friendship) {
         throw new AppError("Friendship not found", 404);
@@ -150,7 +148,7 @@ export class FriendshipController {
         if (friendship.addressee_id !== userId) {
           throw new AppError(
             "Only the request recipient can accept or reject friend requests",
-            403
+            403,
           );
         }
       } else if (status === FriendshipStatus.BLOCKED) {
@@ -161,7 +159,7 @@ export class FriendshipController {
         ) {
           throw new AppError(
             "You do not have permission to update this friendship",
-            403
+            403,
           );
         }
       } else {
@@ -172,7 +170,7 @@ export class FriendshipController {
       // Update the friendship
       const updatedFriendship = await FriendshipService.updateFriendshipStatus(
         friendshipId,
-        status
+        status,
       );
 
       res.status(200).json({
@@ -181,7 +179,7 @@ export class FriendshipController {
           friendship: updatedFriendship,
         },
       });
-    }
+    },
   );
 
   /**
@@ -194,9 +192,8 @@ export class FriendshipController {
       const userId = req.user!.id;
 
       // Get existing friendship
-      const friendship = await FriendshipService.getFriendshipById(
-        friendshipId
-      );
+      const friendship =
+        await FriendshipService.getFriendshipById(friendshipId);
 
       if (!friendship) {
         throw new AppError("Friendship not found", 404);
@@ -209,14 +206,14 @@ export class FriendshipController {
       ) {
         throw new AppError(
           "You do not have permission to delete this friendship",
-          403
+          403,
         );
       }
 
       await FriendshipService.deleteFriendship(friendshipId);
 
       res.status(204).send();
-    }
+    },
   );
 
   /**
@@ -233,7 +230,7 @@ export class FriendshipController {
       const { mutualFriends, total } = await FriendshipService.getMutualFriends(
         currentUserId,
         otherUserId,
-        { page, limit }
+        { page, limit },
       );
 
       res.status(200).json({
@@ -246,7 +243,7 @@ export class FriendshipController {
           limit,
         },
       });
-    }
+    },
   );
 
   /**
@@ -272,7 +269,7 @@ export class FriendshipController {
           limit,
         },
       });
-    }
+    },
   );
 
   static getUserFriendships = controllerHandler(
@@ -288,7 +285,7 @@ export class FriendshipController {
 
       const { friendships, total } = await FriendshipService.getUserFriendships(
         userId,
-        { status, page, limit }
+        { status, page, limit },
       );
 
       res.status(200).json({
@@ -301,6 +298,6 @@ export class FriendshipController {
           limit,
         },
       });
-    }
+    },
   );
 }

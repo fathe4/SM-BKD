@@ -24,7 +24,7 @@ router.get(
   authenticate,
   canAccessProfile(false, [UserRole.ADMIN, UserRole.MODERATOR]), // Only admins can access
   validateUserSearch,
-  UserController.getUsers
+  UserController.getUsers,
 );
 
 /**
@@ -36,7 +36,7 @@ router.get(
   "/:id",
   authenticate,
   canAccessProfile(true, [UserRole.ADMIN]), // Allow own profile or admin
-  UserController.getUser
+  UserController.getUser,
 );
 
 /**
@@ -49,7 +49,7 @@ router.post(
   authenticate,
   canAccessProfile(false, [UserRole.ADMIN]), // Only admins can access
   validateCreateUser,
-  UserController.createUser
+  UserController.createUser,
 );
 
 /**
@@ -62,7 +62,7 @@ router.put(
   authenticate,
   canAccessProfile(true, [UserRole.ADMIN, UserRole.MODERATOR]), // Allow own profile or admin
   validateUpdateUser,
-  UserController.updateUser
+  UserController.updateUser,
 );
 
 /**
@@ -74,15 +74,15 @@ router.delete(
   "/:id",
   authenticate,
   canAccessProfile(false, [UserRole.ADMIN]), // Only admins can access
-  UserController.deleteUser
+  UserController.deleteUser,
 );
 
 router.use(
   "/:userId/friendships",
   validateUserId,
   authenticate,
-  canAccessProfile(false, [UserRole.ADMIN, UserRole.MODERATOR ]),
-  FriendshipController.getUserFriendships
+  canAccessProfile(false, [UserRole.ADMIN, UserRole.MODERATOR]),
+  FriendshipController.getUserFriendships,
 );
 
 /**

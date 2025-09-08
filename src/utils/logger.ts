@@ -17,7 +17,7 @@ const logFormat = winston.format.combine(
   winston.format.printf(({ timestamp, level, message, ...meta }) => {
     const metaString = Object.keys(meta).length ? JSON.stringify(meta) : "";
     return `${timestamp} [${level}]: ${message} ${metaString}`;
-  })
+  }),
 );
 
 // Create the logger instance

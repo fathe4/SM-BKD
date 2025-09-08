@@ -9,7 +9,7 @@ import { logger } from "../../utils/logger";
 export const validateRequest = (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {

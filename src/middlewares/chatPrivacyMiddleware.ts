@@ -33,20 +33,20 @@ export class ChatPrivacyMiddleware {
             allowed = await canSeeOnlineStatus(
               userId,
               targetId,
-              settings[targetId]
+              settings[targetId],
             );
             break;
           case "lastActive":
             allowed = await canSeeLastActive(
               userId,
               targetId,
-              settings[targetId]
+              settings[targetId],
             );
             break;
           case "readReceipt":
             allowed = shouldSendReadReceipt(
               settings[userId],
-              settings[targetId]
+              settings[targetId],
             );
             break;
         }
@@ -68,7 +68,7 @@ export class ChatPrivacyMiddleware {
   static canAddParticipants = async (
     req: Request,
     res: Response,
-    next: NextFunction
+    next: NextFunction,
   ) => {
     try {
       const userId = req.user?.id as UUID;
@@ -88,21 +88,21 @@ export class ChatPrivacyMiddleware {
 
         if (allowMessagesFrom === "nobody") {
           return next(
-            new AppError(`User ${participantId} doesn't allow messages`, 403)
+            new AppError(`User ${participantId} doesn't allow messages`, 403),
           );
         }
 
         if (allowMessagesFrom === "friends") {
           const areFriends = await FriendshipService.checkIfUsersAreFriends(
             userId,
-            participantId
+            participantId,
           );
           if (!areFriends) {
             return next(
               new AppError(
                 `You must be friends with user ${participantId} to add them to a chat`,
-                403
-              )
+                403,
+              ),
             );
           }
         }
@@ -110,20 +110,20 @@ export class ChatPrivacyMiddleware {
         if (allowMessagesFrom === "friends_of_friends") {
           const areFriends = await FriendshipService.checkIfUsersAreFriends(
             userId,
-            participantId
+            participantId,
           );
           if (!areFriends) {
             const haveMutualFriends =
               await FriendshipService.checkIfUsersHaveMutualFriends(
                 userId,
-                participantId
+                participantId,
               );
             if (!haveMutualFriends) {
               return next(
                 new AppError(
                   `You need to have mutual friends with user ${participantId}`,
-                  403
-                )
+                  403,
+                ),
               );
             }
           }

@@ -16,7 +16,7 @@ export async function createListing(
   data: Omit<
     MarketplaceListingInsert,
     "id" | "created_at" | "updated_at" | "status"
-  > & { images: string[] }
+  > & { images: string[] },
 ): Promise<{
   listing?: MarketplaceListingRow & { images: string[] };
   error?: string;
@@ -86,7 +86,7 @@ export async function getListingById(id: string): Promise<{
 export async function updateListing(
   id: string,
   data: Record<string, any>,
-  userId: string
+  userId: string,
 ): Promise<{
   listing?: MarketplaceListingRow;
   error?: string;
@@ -141,7 +141,7 @@ export async function updateListing(
 // Hard delete a listing by ID (only owner can delete)
 export async function deleteListing(
   id: string,
-  userId: string
+  userId: string,
 ): Promise<{ success?: boolean; error?: string; status?: number }> {
   if (!supabaseAdmin) {
     return { error: "Supabase admin client not initialized.", status: 500 };

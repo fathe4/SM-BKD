@@ -24,7 +24,7 @@ router.get(
   "/me",
   authenticate,
   canAccessProfile(true), // Allow own profile access
-  ProfileController.getProfile
+  ProfileController.getProfile,
 );
 
 /**
@@ -44,7 +44,7 @@ router.put(
   authenticate,
   canAccessProfile(true, []), // Only allow own profile
   validateProfileUpdate,
-  ProfileController.upsertProfile
+  ProfileController.upsertProfile,
 );
 
 /**
@@ -64,7 +64,7 @@ router.patch(
   authenticate,
   canAccessProfile(true, []), // Only allow own profile
   validateProfileUpdate,
-  ProfileController.updateProfile
+  ProfileController.updateProfile,
 );
 
 /**
@@ -76,7 +76,7 @@ router.delete(
   "/",
   authenticate,
   canAccessProfile(true, []), // Only allow own profile
-  ProfileController.deleteProfile
+  ProfileController.deleteProfile,
 );
 
 /**
@@ -93,7 +93,7 @@ router.put(
   authenticate,
   canAccessProfile(false, [UserRole.ADMIN]), // Only allow admin, not same user
   validateProfileUpdate,
-  ProfileController.upsertProfile
+  ProfileController.upsertProfile,
 );
 
 /**
@@ -106,7 +106,7 @@ router.patch(
   authenticate,
   canAccessProfile(false, [UserRole.ADMIN]), // Only allow admin, not same user
   validateProfileUpdate,
-  ProfileController.updateProfile
+  ProfileController.updateProfile,
 );
 
 /**
@@ -118,7 +118,7 @@ router.delete(
   "/:userId",
   authenticate,
   canAccessProfile(false, [UserRole.ADMIN]), // Only allow admin, not same user
-  ProfileController.deleteProfile
+  ProfileController.deleteProfile,
 );
 
 export default router;

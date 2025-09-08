@@ -17,7 +17,7 @@ export function setupBoostExpirationJob(): void {
 
         if (!supabaseAdmin) {
           logger.error(
-            "Supabase admin client is not configured. Skipping boost expiration job."
+            "Supabase admin client is not configured. Skipping boost expiration job.",
           );
           return;
         }
@@ -55,7 +55,7 @@ export function setupBoostExpirationJob(): void {
     },
     null, // onComplete callback
     true, // start immediately
-    "UTC" // timezone
+    "UTC", // timezone
   );
 
   logger.info("Boost expiration job scheduled to run every hour");

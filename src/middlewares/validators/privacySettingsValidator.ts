@@ -16,7 +16,7 @@ const baseSettingsRules = [
     .optional()
     .isIn(VISIBILITY_LEVELS)
     .withMessage(
-      `Profile visibility must be one of: ${VISIBILITY_LEVELS.join(", ")}`
+      `Profile visibility must be one of: ${VISIBILITY_LEVELS.join(", ")}`,
     ),
 
   body("showOnlineStatus")
@@ -36,14 +36,14 @@ const messageSettingsRules = [
     .optional()
     .isIn(ALLOW_LEVELS)
     .withMessage(
-      `Allow messages from must be one of: ${ALLOW_LEVELS.join(", ")}`
+      `Allow messages from must be one of: ${ALLOW_LEVELS.join(", ")}`,
     ),
 
   body("messageRetentionPeriod")
     .optional()
     .isIn(retentionPeriods)
     .withMessage(
-      `Message retention period must be one of: ${retentionPeriods.join(", ")}`
+      `Message retention period must be one of: ${retentionPeriods.join(", ")}`,
     ),
 
   body("allowMessageReadReceipts")
@@ -73,7 +73,7 @@ const fullSettingsRules = [
     .optional()
     .isIn(ALLOW_LEVELS)
     .withMessage(
-      `Allow friend requests must be one of: ${ALLOW_LEVELS.join(", ")}`
+      `Allow friend requests must be one of: ${ALLOW_LEVELS.join(", ")}`,
     ),
 
   body("settings.allowTagging")
@@ -90,14 +90,14 @@ const fullSettingsRules = [
     .optional()
     .isIn(VISIBILITY_LEVELS)
     .withMessage(
-      `Show birthdate must be one of: ${VISIBILITY_LEVELS.join(", ")}`
+      `Show birthdate must be one of: ${VISIBILITY_LEVELS.join(", ")}`,
     ),
 
   body("settings.showLocation")
     .optional()
     .isIn(VISIBILITY_LEVELS)
     .withMessage(
-      `Show location must be one of: ${VISIBILITY_LEVELS.join(", ")}`
+      `Show location must be one of: ${VISIBILITY_LEVELS.join(", ")}`,
     ),
 
   body("settings.showEmail")
@@ -109,14 +109,14 @@ const fullSettingsRules = [
     .optional()
     .isIn(VISIBILITY_LEVELS)
     .withMessage(
-      `Posts default visibility must be one of: ${VISIBILITY_LEVELS.join(", ")}`
+      `Posts default visibility must be one of: ${VISIBILITY_LEVELS.join(", ")}`,
     ),
 
   body("settings.showFriendsList")
     .optional()
     .isIn(VISIBILITY_LEVELS)
     .withMessage(
-      `Show friends list must be one of: ${VISIBILITY_LEVELS.join(", ")}`
+      `Show friends list must be one of: ${VISIBILITY_LEVELS.join(", ")}`,
     ),
 
   body("settings.twoFactorAuthEnabled")
@@ -138,14 +138,14 @@ const fullSettingsRules = [
     .optional()
     .isIn(ALLOW_LEVELS)
     .withMessage(
-      `Allow messages from must be one of: ${ALLOW_LEVELS.join(", ")}`
+      `Allow messages from must be one of: ${ALLOW_LEVELS.join(", ")}`,
     ),
 
   body("settings.messageSettings.messageRetentionPeriod")
     .optional()
     .isIn(retentionPeriods)
     .withMessage(
-      `Message retention period must be one of: ${retentionPeriods.join(", ")}`
+      `Message retention period must be one of: ${retentionPeriods.join(", ")}`,
     ),
 
   body("settings.messageSettings.allowMessageReadReceipts")

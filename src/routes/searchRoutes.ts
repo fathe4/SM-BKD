@@ -23,7 +23,7 @@ router.get("/users", validateBasicSearch, SearchController.searchUsers);
 router.post(
   "/users/advanced",
   validateAdvancedSearch,
-  SearchController.advancedUserSearch
+  SearchController.advancedUserSearch,
 );
 
 // /**

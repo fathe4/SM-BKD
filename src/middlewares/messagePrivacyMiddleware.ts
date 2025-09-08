@@ -19,7 +19,7 @@ export class MessagePrivacyMiddleware {
   static canSendMessage = async (
     req: Request,
     res: Response,
-    next: NextFunction
+    next: NextFunction,
   ) => {
     try {
       // The sender is the authenticated user
@@ -59,12 +59,12 @@ export class MessagePrivacyMiddleware {
           // Check if users are friends
           const areFriends = await FriendshipService.checkIfUsersAreFriends(
             senderId,
-            recipientId
+            recipientId,
           );
           if (!areFriends) {
             throw new AppError(
               "You must be friends with this user to send messages",
-              403
+              403,
             );
           }
           return next();
@@ -74,7 +74,7 @@ export class MessagePrivacyMiddleware {
           // First check if they're direct friends
           const directFriends = await FriendshipService.checkIfUsersAreFriends(
             senderId,
-            recipientId
+            recipientId,
           );
           if (directFriends) {
             return next();
@@ -84,12 +84,12 @@ export class MessagePrivacyMiddleware {
           const haveMutualFriends =
             await FriendshipService.checkIfUsersHaveMutualFriends(
               senderId,
-              recipientId
+              recipientId,
             );
           if (!haveMutualFriends) {
             throw new AppError(
               "You need to have mutual friends with this user to send messages",
-              403
+              403,
             );
           }
           return next();
@@ -99,7 +99,7 @@ export class MessagePrivacyMiddleware {
           // Default to restrictive if setting is unknown
           throw new AppError(
             "You don't have permission to message this user",
-            403
+            403,
           );
       }
     } catch (error) {
@@ -114,7 +114,7 @@ export class MessagePrivacyMiddleware {
   static applyRetentionPolicy = async (
     req: Request,
     res: Response,
-    next: NextFunction
+    next: NextFunction,
   ) => {
     try {
       const senderId = req.user?.id as UUID;
@@ -157,13 +157,13 @@ export class MessagePrivacyMiddleware {
 
       if (senderIndex === -1 || recipientIndex === -1) {
         logger.warn(
-          `Invalid retention period found: ${senderRetention} or ${recipientRetention}`
+          `Invalid retention period found: ${senderRetention} or ${recipientRetention}`,
         );
       }
 
       const strictestPolicyIndex = Math.min(
         senderIndex !== -1 ? senderIndex : retentionHierarchy.length - 1,
-        recipientIndex !== -1 ? recipientIndex : retentionHierarchy.length - 1
+        recipientIndex !== -1 ? recipientIndex : retentionHierarchy.length - 1,
       );
 
       const retentionPolicy = retentionHierarchy[strictestPolicyIndex];
@@ -217,7 +217,7 @@ export class MessagePrivacyMiddleware {
   static canForwardMessage = async (
     req: Request,
     res: Response,
-    next: NextFunction
+    next: NextFunction,
   ) => {
     try {
       const userId = req.user?.id as UUID;
@@ -236,7 +236,7 @@ export class MessagePrivacyMiddleware {
 
       // Check if user is part of the conversation
       const chatParticipants = await messageService.getChatParticipants(
-        message.chat_id
+        message.chat_id,
       );
       const isParticipant = chatParticipants.some((p) => p.id === userId);
 
@@ -254,8 +254,8 @@ export class MessagePrivacyMiddleware {
         return next(
           new AppError(
             "The sender doesn't allow forwarding of their messages",
-            403
-          )
+            403,
+          ),
         );
       }
 
@@ -271,7 +271,7 @@ export class MessagePrivacyMiddleware {
   static checkReadReceiptPermission = async (
     req: Request,
     res: Response,
-    next: NextFunction
+    next: NextFunction,
   ) => {
     try {
       const userId = req.user?.id as UUID;

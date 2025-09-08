@@ -30,15 +30,15 @@ const allowedImageTypes = [
 const imageFileFilter = (
   req: any,
   file: Express.Multer.File,
-  cb: multer.FileFilterCallback
+  cb: multer.FileFilterCallback,
 ) => {
   if (allowedImageTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
     cb(
       new Error(
-        `Invalid file type. Allowed types: ${allowedImageTypes.join(", ")}`
-      )
+        `Invalid file type. Allowed types: ${allowedImageTypes.join(", ")}`,
+      ),
     );
   }
 };

@@ -11,7 +11,7 @@ import { logger } from "./logger";
  */
 export const asyncHandler = <T, Args extends any[]>(
   fn: (...args: Args) => Promise<T>,
-  errorMessage: string
+  errorMessage: string,
 ) => {
   return async (...args: Args): Promise<T> => {
     try {
@@ -25,7 +25,7 @@ export const asyncHandler = <T, Args extends any[]>(
 
       throw new AppError(
         error instanceof Error ? error.message : errorMessage,
-        500
+        500,
       );
     }
   };

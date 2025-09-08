@@ -10,7 +10,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret_key_here";
  */
 export const socketAuthMiddleware = (
   socket: Socket,
-  next: (err?: ExtendedError) => void
+  next: (err?: ExtendedError) => void,
 ) => {
   try {
     // Get token from handshake auth or query

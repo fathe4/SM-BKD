@@ -37,7 +37,7 @@ export class SearchService {
   static searchUsersNearby(
     userId: string,
     radius: number,
-    arg2: { page: number; limit: number }
+    arg2: { page: number; limit: number },
   ) {
     throw new Error("Method not implemented.");
   }
@@ -46,7 +46,7 @@ export class SearchService {
    */
   static async searchUsers(
     query: string,
-    options: SearchOptions = {}
+    options: SearchOptions = {},
   ): Promise<SearchResult<BasicUserProfile>> {
     try {
       const page = options.page || 1;
@@ -62,10 +62,10 @@ export class SearchService {
         .from("users")
         .select(
           "id, username, first_name, last_name, profile_picture, bio, location, is_verified",
-          { count: "exact" }
+          { count: "exact" },
         )
         .or(
-          `username.ilike.%${query}%,first_name.ilike.%${query}%,last_name.ilike.%${query}%`
+          `username.ilike.%${query}%,first_name.ilike.%${query}%,last_name.ilike.%${query}%`,
         )
         .eq("is_active", true)
         .range(offset, offset + limit - 1);
@@ -109,7 +109,7 @@ export class SearchService {
    * Advanced search for users with multiple criteria
    */
   static async advancedUserSearch(
-    params: AdvancedSearchParams
+    params: AdvancedSearchParams,
   ): Promise<SearchResult<BasicUserProfile>> {
     try {
       const page = params.page || 1;
@@ -136,21 +136,21 @@ export class SearchService {
             coordinates
           )
           `,
-          { count: "exact" }
+          { count: "exact" },
         )
         .eq("is_active", true);
 
       // Apply text search if provided
       if (params.query && params.query.trim()) {
         dbQuery = dbQuery.or(
-          `username.ilike.%${params.query}%,first_name.ilike.%${params.query}%,last_name.ilike.%${params.query}%`
+          `username.ilike.%${params.query}%,first_name.ilike.%${params.query}%,last_name.ilike.%${params.query}%`,
         );
       }
 
       // Apply location filter if provided
       if (params.location && params.location.trim()) {
         dbQuery = dbQuery.or(
-          `location.ilike.%${params.location}%,profiles.location.ilike.%${params.location}%`
+          `location.ilike.%${params.location}%,profiles.location.ilike.%${params.location}%`,
         );
       }
 
@@ -164,11 +164,11 @@ export class SearchService {
           const maxBirthDate = new Date(
             maxBirthYear,
             now.getMonth(),
-            now.getDate()
+            now.getDate(),
           );
           dbQuery = dbQuery.lte(
             "profiles.birth_date",
-            maxBirthDate.toISOString()
+            maxBirthDate.toISOString(),
           );
         }
 
@@ -178,11 +178,11 @@ export class SearchService {
           const minBirthDate = new Date(
             minBirthYear,
             now.getMonth(),
-            now.getDate()
+            now.getDate(),
           );
           dbQuery = dbQuery.gte(
             "profiles.birth_date",
-            minBirthDate.toISOString()
+            minBirthDate.toISOString(),
           );
         }
       }
@@ -192,7 +192,7 @@ export class SearchService {
         // We need to match users who have ANY of the interests
         params.interests.forEach((interest) => {
           dbQuery = dbQuery.or(
-            `profiles.interests->categories.cs.{${interest}},profiles.interests->tags.cs.{${interest}}`
+            `profiles.interests->categories.cs.{${interest}},profiles.interests->tags.cs.{${interest}}`,
           );
         });
       }

@@ -18,7 +18,7 @@ export const createListingSchema = z.object({
 export function validateCreateListing(
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) {
   const result = createListingSchema.safeParse(req.body);
   if (!result.success) {

@@ -21,7 +21,7 @@ export class PrivacyPolicyMiddleware {
   static canSendMessage = async (
     req: Request,
     res: Response,
-    next: NextFunction
+    next: NextFunction,
   ) => {
     try {
       // The sender is the authenticated user
@@ -62,12 +62,12 @@ export class PrivacyPolicyMiddleware {
       if (allowMessagesFrom === "friends") {
         const areFriends = await FriendshipService.checkIfUsersAreFriends(
           senderId,
-          recipientId
+          recipientId,
         );
         if (!areFriends) {
           throw new AppError(
             "You must be friends with this user to send messages",
-            403
+            403,
           );
         }
         return next();
@@ -78,7 +78,7 @@ export class PrivacyPolicyMiddleware {
         // First check if they're direct friends
         const areFriends = await FriendshipService.checkIfUsersAreFriends(
           senderId,
-          recipientId
+          recipientId,
         );
         if (areFriends) {
           return next();
@@ -88,12 +88,12 @@ export class PrivacyPolicyMiddleware {
         const haveMutualFriends =
           await FriendshipService.checkIfUsersHaveMutualFriends(
             senderId,
-            recipientId
+            recipientId,
           );
         if (!haveMutualFriends) {
           throw new AppError(
             "You need to have mutual friends with this user to send messages",
-            403
+            403,
           );
         }
         return next();
@@ -112,7 +112,7 @@ export class PrivacyPolicyMiddleware {
   static applyMessageRetentionPolicy = async (
     req: Request,
     res: Response,
-    next: NextFunction
+    next: NextFunction,
   ) => {
     try {
       const senderId = req.user?.id as UUID;
@@ -176,7 +176,7 @@ export class PrivacyPolicyMiddleware {
   static canForwardMessage = async (
     req: Request,
     res: Response,
-    next: NextFunction
+    next: NextFunction,
   ) => {
     try {
       const userId = req.user?.id as UUID;
@@ -212,8 +212,8 @@ export class PrivacyPolicyMiddleware {
         return next(
           new AppError(
             "The sender doesn't allow forwarding of their messages",
-            403
-          )
+            403,
+          ),
         );
       }
 
@@ -229,7 +229,7 @@ export class PrivacyPolicyMiddleware {
   static canViewProfile = async (
     req: Request,
     res: Response,
-    next: NextFunction
+    next: NextFunction,
   ) => {
     try {
       const { userId, targetId } = await getRequiredIds(req, ["targetId"]);
@@ -253,7 +253,7 @@ export class PrivacyPolicyMiddleware {
       if (visibility === "friends") {
         const areFriends = await FriendshipService.checkIfUsersAreFriends(
           userId,
-          targetId
+          targetId,
         );
         if (!areFriends) {
           throw new AppError("This profile is only visible to friends", 403);
@@ -278,7 +278,7 @@ export class PrivacyPolicyMiddleware {
   static canTagUser = async (
     req: Request,
     res: Response,
-    next: NextFunction
+    next: NextFunction,
   ) => {
     try {
       const { targetId } = await getRequiredIds(req, ["targetId"]);
@@ -309,7 +309,7 @@ export class PrivacyPolicyMiddleware {
       | "viewProfile"
       | "tag"
       | "messageRetention"
-      | "forwardMessage"
+      | "forwardMessage",
   ) => {
     switch (operationType) {
       case "message":
@@ -327,8 +327,8 @@ export class PrivacyPolicyMiddleware {
           next(
             new AppError(
               `Unknown privacy operation type: ${operationType}`,
-              500
-            )
+              500,
+            ),
           );
         };
     }

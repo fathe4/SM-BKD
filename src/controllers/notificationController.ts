@@ -28,7 +28,7 @@ export class NotificationController {
           limit,
         },
       });
-    }
+    },
   );
 
   /**
@@ -41,7 +41,7 @@ export class NotificationController {
 
     const notification = await NotificationService.markAsRead(
       notificationId,
-      userId
+      userId,
     );
 
     res.status(200).json({
@@ -66,7 +66,7 @@ export class NotificationController {
         status: "success",
         message: "All notifications marked as read",
       });
-    }
+    },
   );
 
   /**
@@ -85,7 +85,7 @@ export class NotificationController {
           count,
         },
       });
-    }
+    },
   );
 
   /**
@@ -100,7 +100,7 @@ export class NotificationController {
       await NotificationService.deleteNotification(notificationId, userId);
 
       res.status(204).send();
-    }
+    },
   );
 
   /**
@@ -114,6 +114,6 @@ export class NotificationController {
       await NotificationService.deleteAllNotifications(userId);
 
       res.status(204).send();
-    }
+    },
   );
 }

@@ -27,7 +27,7 @@ router.delete("/", authenticate, ProfilePictureController.removeProfilePicture);
 router.put(
   "/cover",
   authenticate,
-  ProfilePictureController.updateCoverPictureUrl
+  ProfilePictureController.updateCoverPictureUrl,
 );
 
 /**
@@ -38,7 +38,7 @@ router.put(
 router.delete(
   "/cover",
   authenticate,
-  ProfilePictureController.removeCoverPicture
+  ProfilePictureController.removeCoverPicture,
 );
 
 export default router;

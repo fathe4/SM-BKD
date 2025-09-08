@@ -46,7 +46,7 @@ export const validateRegister = [
     .withMessage("Username must be at least 3 characters long")
     .matches(/^[a-zA-Z0-9_\\.]+$/)
     .withMessage(
-      "Username can only contain letters, numbers, underscores and dots"
+      "Username can only contain letters, numbers, underscores and dots",
     )
     .trim(),
 
@@ -69,7 +69,7 @@ export const validateRegister = [
     .custom((value) => {
       if (!Array.isArray(value) || value.length !== 2) {
         throw new Error(
-          "Coordinates must be an array with 2 elements [longitude, latitude]"
+          "Coordinates must be an array with 2 elements [longitude, latitude]",
         );
       }
       if (typeof value[0] !== "number" || typeof value[1] !== "number") {
@@ -131,7 +131,7 @@ export const validateLogin = [
     .custom((value) => {
       if (!Array.isArray(value) || value.length !== 2) {
         throw new Error(
-          "Coordinates must be an array with 2 elements [longitude, latitude]"
+          "Coordinates must be an array with 2 elements [longitude, latitude]",
         );
       }
       if (typeof value[0] !== "number" || typeof value[1] !== "number") {

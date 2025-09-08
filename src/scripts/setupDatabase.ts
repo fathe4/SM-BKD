@@ -12,7 +12,7 @@ config();
 async function setupDatabase() {
   if (!supabaseAdmin) {
     logger.error(
-      "Supabase admin client not initialized. Check your environment variables."
+      "Supabase admin client not initialized. Check your environment variables.",
     );
     process.exit(1);
   }

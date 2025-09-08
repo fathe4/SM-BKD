@@ -34,7 +34,7 @@ export class CommentController {
       // Pass the uploaded files to the service
       const comment = await CommentService.createComment(
         commentData,
-        req.files as Express.Multer.File[]
+        req.files as Express.Multer.File[],
       );
 
       res.status(201).json({
@@ -43,7 +43,7 @@ export class CommentController {
           comment,
         },
       });
-    }
+    },
   );
 
   /**
@@ -68,7 +68,7 @@ export class CommentController {
         commentId,
         userId,
         updateData,
-        req.files as Express.Multer.File[]
+        req.files as Express.Multer.File[],
       );
 
       res.status(200).json({
@@ -77,7 +77,7 @@ export class CommentController {
           comment,
         },
       });
-    }
+    },
   );
   /**
    * Get all comments for a post
@@ -94,7 +94,7 @@ export class CommentController {
         postId,
         page,
         limit,
-        includeReplies
+        includeReplies,
       );
 
       res.status(200).json({
@@ -107,7 +107,7 @@ export class CommentController {
           limit,
         },
       });
-    }
+    },
   );
 
   /**
@@ -123,7 +123,7 @@ export class CommentController {
       const { replies, total } = await CommentService.getCommentReplies(
         commentId,
         page,
-        limit
+        limit,
       );
 
       res.status(200).json({
@@ -136,7 +136,7 @@ export class CommentController {
           limit,
         },
       });
-    }
+    },
   );
 
   /**
@@ -154,7 +154,7 @@ export class CommentController {
       await CommentService.deleteComment(commentId, userId, isAdmin);
 
       res.status(204).send();
-    }
+    },
   );
 
   /**
@@ -173,6 +173,6 @@ export class CommentController {
           count,
         },
       });
-    }
+    },
   );
 }

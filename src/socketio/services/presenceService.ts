@@ -18,15 +18,18 @@ const userStatuses = new Map<
  */
 export function initPresenceSystem(): void {
   // Schedule cleanup of offline users after 24 hours
-  setInterval(() => {
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  setInterval(
+    () => {
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    userStatuses.forEach((data, userId) => {
-      if (data.status === "offline" && data.lastActive < twentyFourHoursAgo) {
-        userStatuses.delete(userId);
-      }
-    });
-  }, 60 * 60 * 1000); // Run hourly
+      userStatuses.forEach((data, userId) => {
+        if (data.status === "offline" && data.lastActive < twentyFourHoursAgo) {
+          userStatuses.delete(userId);
+        }
+      });
+    },
+    60 * 60 * 1000,
+  ); // Run hourly
 }
 
 /**
@@ -35,7 +38,7 @@ export function initPresenceSystem(): void {
 export function updateUserStatus(
   userId: string,
   status: "online" | "offline" | "away",
-  deviceType?: string
+  deviceType?: string,
 ): void {
   const userData = userStatuses.get(userId) || {
     status: "offline",

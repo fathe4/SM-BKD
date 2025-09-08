@@ -22,13 +22,13 @@ export interface BasicUserProfile {
  * Utility to get basic user profile information that can be reused across the application
  */
 export async function getUserBasicProfile(
-  userId: string
+  userId: string,
 ): Promise<BasicUserProfile> {
   try {
     const { data, error } = await supabase
       .from("users")
       .select(
-        "id, username, first_name, last_name, profile_picture, bio, location, is_verified"
+        "id, username, first_name, last_name, profile_picture, bio, location, is_verified",
       )
       .eq("id", userId)
       .single();
@@ -51,7 +51,7 @@ export async function getUserBasicProfile(
  * Get multiple basic user profiles
  */
 export async function getMultipleUserProfiles(
-  userIds: string[]
+  userIds: string[],
 ): Promise<BasicUserProfile[]> {
   if (!userIds.length) return [];
 
@@ -59,7 +59,7 @@ export async function getMultipleUserProfiles(
     const { data, error } = await supabase
       .from("users")
       .select(
-        "id, username, first_name, last_name, profile_picture, bio, location, is_verified"
+        "id, username, first_name, last_name, profile_picture, bio, location, is_verified",
       )
       .in("id", userIds);
 

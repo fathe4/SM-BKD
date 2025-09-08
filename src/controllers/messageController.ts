@@ -42,7 +42,7 @@ export class MessageController {
           expiresAt: autoDeleteAt,
         },
       });
-    }
+    },
   );
 
   /**
@@ -62,7 +62,7 @@ export class MessageController {
         await enhancedMessageService.markMessageAsRead(
           messageId,
           userId,
-          shouldSendReadReceipt
+          shouldSendReadReceipt,
         );
 
       res.status(200).json({
@@ -72,7 +72,7 @@ export class MessageController {
           readReceiptSent,
         },
       });
-    }
+    },
   );
 
   /**
@@ -92,7 +92,7 @@ export class MessageController {
           chatId,
           userId,
           page,
-          limit
+          limit,
         );
 
       res.status(200).json({
@@ -105,7 +105,7 @@ export class MessageController {
           limit,
         },
       });
-    }
+    },
   );
 
   /**
@@ -120,7 +120,7 @@ export class MessageController {
       await enhancedMessageService.deleteMessage(messageId, userId);
 
       res.status(204).send();
-    }
+    },
   );
 
   /**
@@ -140,13 +140,13 @@ export class MessageController {
       // Check if user has permission to forward this message
       const canForward = await enhancedMessageService.canForwardMessage(
         messageId,
-        userId
+        userId,
       );
 
       if (!canForward) {
         throw new AppError(
           "You don't have permission to forward this message",
-          403
+          403,
         );
       }
 
@@ -180,6 +180,6 @@ export class MessageController {
           message: forwardedMessage,
         },
       });
-    }
+    },
   );
 }

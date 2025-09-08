@@ -23,7 +23,7 @@ router.post(
   validateCreateMessage,
   MessagePrivacyMiddleware.canSendMessage,
   MessagePrivacyMiddleware.applyRetentionPolicy,
-  MessageController.sendMessage
+  MessageController.sendMessage,
 );
 
 /**
@@ -34,7 +34,7 @@ router.post(
 router.post(
   "/:messageId/read",
   MessagePrivacyMiddleware.checkReadReceiptPermission,
-  MessageController.markMessageAsRead
+  MessageController.markMessageAsRead,
 );
 
 /**
@@ -54,7 +54,7 @@ router.post(
   validateForwardMessage,
   MessagePrivacyMiddleware.canForwardMessage,
   MessagePrivacyMiddleware.applyRetentionPolicy, // Apply retention policy for the forwarded message
-  MessageController.forwardMessage
+  MessageController.forwardMessage,
 );
 
 /**

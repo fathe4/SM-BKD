@@ -44,7 +44,7 @@ export async function updateListing(req: Request, res: Response) {
   const { listing, error, status } = await marketplaceService.updateListing(
     id,
     req.body,
-    userId
+    userId,
   );
   if (error) {
     return res.status(status || 400).json({ error });

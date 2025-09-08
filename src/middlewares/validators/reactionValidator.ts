@@ -10,7 +10,7 @@ export const validateReaction = [
   check("reaction_type")
     .isIn(Object.values(ReactionType))
     .withMessage(
-      "Invalid reaction type. Allowed values: like, love, haha, wow, sad, angry"
+      "Invalid reaction type. Allowed values: like, love, haha, wow, sad, angry",
     ),
 
   validateRequest,

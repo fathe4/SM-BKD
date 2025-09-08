@@ -72,7 +72,7 @@ export class ChatController {
     const { chats, total } = await ChatService.getUserChats(
       userId,
       page,
-      limit
+      limit,
     );
 
     res.status(200).json({
@@ -159,7 +159,7 @@ export class ChatController {
           chat: chatSummary,
         },
       });
-    }
+    },
   );
 
   /**
@@ -190,7 +190,7 @@ export class ChatController {
           message: "Participant removed successfully",
         });
       }
-    }
+    },
   );
 
   /**
@@ -246,7 +246,7 @@ export class ChatController {
         {
           page,
           limit,
-        }
+        },
       );
 
       res.status(200).json({
@@ -259,6 +259,6 @@ export class ChatController {
           limit,
         },
       });
-    }
+    },
   );
 }

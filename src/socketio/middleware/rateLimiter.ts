@@ -13,7 +13,7 @@ const MAX_CONNECTIONS_PER_WINDOW = 5;
  */
 export const rateLimiterMiddleware = (
   socket: Socket,
-  next: (err?: ExtendedError) => void
+  next: (err?: ExtendedError) => void,
 ) => {
   const ip = socket.handshake.address;
   const now = Date.now();

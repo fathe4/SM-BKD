@@ -58,7 +58,7 @@ router.post(
   "/:chatId/participants",
   validateAddParticipants,
   ChatPrivacyMiddleware.canAddParticipants,
-  ChatController.addParticipants
+  ChatController.addParticipants,
 );
 
 /**
@@ -68,7 +68,7 @@ router.post(
  */
 router.delete(
   "/:chatId/participants/:participantId",
-  ChatController.removeParticipant
+  ChatController.removeParticipant,
 );
 
 /**

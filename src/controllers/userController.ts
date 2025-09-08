@@ -28,7 +28,7 @@ export class UserController {
 
       // Log processed parameters for debugging
       logger.info(
-        `Processed parameters: page=${page}, limit=${limit}, search=${search}, role=${role}`
+        `Processed parameters: page=${page}, limit=${limit}, search=${search}, role=${role}`,
       );
 
       // Only pass defined parameters to the service
@@ -229,7 +229,7 @@ export class UserController {
         updateData.username !== existingUser.username
       ) {
         const existingUsername = await UserService.findUserByUsername(
-          updateData.username
+          updateData.username,
         );
         if (existingUsername) {
           throw new AppError("Username already taken", 400);

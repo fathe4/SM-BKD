@@ -5,7 +5,7 @@ import { logger } from "../utils/logger";
 export const extractClientInfo = (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   // Extract IP address
   let ipAddress = req.ip || "";
@@ -48,7 +48,7 @@ export const extractClientInfo = (
   // Generate a device token
   const deviceToken = `${req.headers["sec-ch-ua"] || ""}-${userAgent.substring(
     0,
-    50
+    50,
   )}`;
 
   // Determine device type based on user-agent

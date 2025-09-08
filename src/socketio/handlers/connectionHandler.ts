@@ -63,7 +63,7 @@ export function connectionHandler(io: SocketIOServer, socket: Socket): void {
         status: data.status,
         lastActive: new Date().toISOString(),
       });
-    }
+    },
   );
 
   socket.on("disconnect", () => {

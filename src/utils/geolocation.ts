@@ -22,7 +22,7 @@ export interface GeoLocationData {
  * Get geolocation data from an IP address using the free ipapi.co service
  */
 export const getLocationFromIp = async (
-  ip: string
+  ip: string,
 ): Promise<GeoLocationData | null> => {
   try {
     // Remove IPv6 prefix if present (for localhost testing)
@@ -59,7 +59,7 @@ export const getLocationFromIp = async (
       };
     } else {
       logger.warn(
-        `Geolocation API error: ${response.data.error || "Unknown error"}`
+        `Geolocation API error: ${response.data.error || "Unknown error"}`,
       );
       return null;
     }
@@ -78,7 +78,7 @@ let lastResetTime = Date.now();
 const MAX_REQUESTS_PER_DAY = 1000;
 
 export const throttledGetLocationFromIp = async (
-  ip: string
+  ip: string,
 ): Promise<GeoLocationData | null> => {
   // Reset counter if a day has passed
   const now = Date.now();

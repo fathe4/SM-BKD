@@ -20,7 +20,7 @@ export function setupMessageRetentionJob(): void {
       // Clean up read messages with "after_read" retention policy
       const readMsgCount = await cleanupReadMessages();
       logger.info(
-        `Cleaned up ${readMsgCount} read messages with after_read policy`
+        `Cleaned up ${readMsgCount} read messages with after_read policy`,
       );
     } catch (error) {
       logger.error("Error in message retention job:", error);
@@ -107,7 +107,7 @@ async function cleanupReadMessages(): Promise<number> {
       if (privacyError) {
         logger.error(
           `Error getting privacy settings for user ${senderId}:`,
-          privacyError
+          privacyError,
         );
         continue;
       }
@@ -131,7 +131,7 @@ async function cleanupReadMessages(): Promise<number> {
         if (error) {
           logger.error(
             `Error deleting read messages for sender ${senderId}:`,
-            error
+            error,
           );
         } else {
           totalDeleted += (data as unknown as unknown[]).length || 0;

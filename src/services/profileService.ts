@@ -25,7 +25,7 @@ export class ProfileService {
             cover_picture, 
             is_verified
           )
-        `
+        `,
         )
         .eq("user_id", userId)
         .single();
@@ -48,7 +48,7 @@ export class ProfileService {
    * Create or update a user profile
    */
   static async upsertProfile(
-    profileData: Omit<Profile, "id" | "created_at" | "updated_at">
+    profileData: Omit<Profile, "id" | "created_at" | "updated_at">,
   ): Promise<Profile> {
     try {
       // Check if profile exists
@@ -110,7 +110,7 @@ export class ProfileService {
    */
   static async updateProfile(
     userId: string,
-    updateData: ProfileUpdate
+    updateData: ProfileUpdate,
   ): Promise<Profile> {
     try {
       // Check if profile exists
@@ -178,7 +178,7 @@ export class ProfileService {
       location?: string;
       interests?: string[];
       ageRange?: { min?: number; max?: number };
-    }
+    },
   ): Promise<{ profiles: ProfileWithUserDetails[]; total: number }> {
     try {
       // Calculate offset
@@ -198,7 +198,7 @@ export class ProfileService {
           is_verified
         )
       `,
-        { count: "exact" }
+        { count: "exact" },
       );
 
       // Apply filters if provided
@@ -211,7 +211,7 @@ export class ProfileService {
           // Filter by any matching interest
           filters.interests.forEach((interest) => {
             query = query.or(
-              `interests->categories.cs.{${interest}},interests->tags.cs.{${interest}}`
+              `interests->categories.cs.{${interest}},interests->tags.cs.{${interest}}`,
             );
           });
         }
@@ -225,7 +225,7 @@ export class ProfileService {
             const maxBirthDate = new Date(
               maxBirthYear,
               now.getMonth(),
-              now.getDate()
+              now.getDate(),
             );
             query = query.lte("birth_date", maxBirthDate.toISOString());
           }
@@ -236,7 +236,7 @@ export class ProfileService {
             const minBirthDate = new Date(
               minBirthYear,
               now.getMonth(),
-              now.getDate()
+              now.getDate(),
             );
             query = query.gte("birth_date", minBirthDate.toISOString());
           }

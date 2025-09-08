@@ -62,7 +62,7 @@ export class AppError extends Error {
 export const errorHandler = (
   err: Error | AppError,
   req: Request,
-  res: Response
+  res: Response,
 ) => {
   const isAppError = err instanceof AppError;
 
@@ -81,7 +81,7 @@ export const errorHandler = (
 
   // Log the error
   logger.error(
-    `${statusCode} - ${message} - ${req.originalUrl} - ${req.method} - ${req.ip}`
+    `${statusCode} - ${message} - ${req.originalUrl} - ${req.method} - ${req.ip}`,
   );
   if (stack) logger.error(stack);
 

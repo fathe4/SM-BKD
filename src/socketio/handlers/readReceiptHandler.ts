@@ -35,7 +35,7 @@ export function readReceiptHandler(io: SocketIOServer, socket: Socket): void {
               const { readReceiptSent, message } =
                 await enhancedMessageService.markMessageAsRead(
                   messageId,
-                  userId
+                  userId,
                 );
               console.log(readReceiptSent, message);
 
@@ -50,11 +50,11 @@ export function readReceiptHandler(io: SocketIOServer, socket: Socket): void {
             } catch (error) {
               logger.error(
                 `Error marking message ${messageId} as read:`,
-                error
+                error,
               );
               return { messageId, success: false, reason: "error" };
             }
-          })
+          }),
         );
 
         // Get all unique senders from the successful results
@@ -94,7 +94,7 @@ export function readReceiptHandler(io: SocketIOServer, socket: Socket): void {
                       (r) =>
                         r.success &&
                         r.message &&
-                        r.message.sender_id === senderId
+                        r.message.sender_id === senderId,
                     )
                     .map((r) => r.messageId),
                 });
@@ -113,6 +113,6 @@ export function readReceiptHandler(io: SocketIOServer, socket: Socket): void {
       } catch (error) {
         logger.error("Error processing batch read receipts:", error);
       }
-    }
+    },
   );
 }

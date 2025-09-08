@@ -15,7 +15,7 @@ export class SocketPrivacyUtils {
    */
   static async canSendReadReceipt(
     userId: UUID,
-    targetId: UUID
+    targetId: UUID,
   ): Promise<boolean> {
     try {
       // Get privacy settings for both users
@@ -36,7 +36,7 @@ export class SocketPrivacyUtils {
    */
   static async canMessageUsers(
     senderId: UUID,
-    recipientIds: UUID[]
+    recipientIds: UUID[],
   ): Promise<boolean> {
     try {
       // Check each recipient's privacy settings
@@ -62,7 +62,7 @@ export class SocketPrivacyUtils {
             // Only friends can send messages
             const areFriends = await FriendshipService.checkIfUsersAreFriends(
               senderId,
-              recipientId
+              recipientId,
             );
             if (!areFriends) return false;
             break;
@@ -72,14 +72,14 @@ export class SocketPrivacyUtils {
             // Friends or friends-of-friends can send messages
             const areFriends = await FriendshipService.checkIfUsersAreFriends(
               senderId,
-              recipientId
+              recipientId,
             );
             if (areFriends) continue;
 
             const haveMutualFriends =
               await FriendshipService.checkIfUsersHaveMutualFriends(
                 senderId,
-                recipientId
+                recipientId,
               );
             if (!haveMutualFriends) return false;
             break;

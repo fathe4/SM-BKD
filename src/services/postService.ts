@@ -14,6 +14,7 @@ import { asyncHandler } from "../utils/asyncHandler";
 import { StorageService } from "./storageService";
 import { logger } from "../utils/logger";
 import { PostBoost, PostBoostCreate, BoostStatus } from "../models/boost.model";
+import { redisService, CachedFeedResult } from "./redis.service";
 
 /**
  * Service class for post-related operations
@@ -37,6 +38,9 @@ export class PostService {
       if (error) {
         throw new AppError(error.message, 400);
       }
+
+      // Invalidate relevant feed caches
+      await this.invalidateRelevantFeeds(postData.user_id, postData.location);
 
       return data as Post;
     },
@@ -191,6 +195,795 @@ export class PostService {
     "Failed to get user posts"
   );
 
+  // ============= FEED HELPER METHODS =============
+
+  /**
+   * Calculate total available posts for pagination
+   * Private helper method to get accurate total counts
+   */
+  private static calculateTotalAvailablePosts = asyncHandler(
+    async (
+      userId: string,
+      friendIds: string[],
+      userLocation: any,
+      seenBoosts: string[]
+    ): Promise<{
+      totalFriendsPosts: number;
+      totalBoostedPosts: number;
+      totalFriendLikedPosts: number;
+      totalPublicPosts: number;
+      estimatedTotal: number;
+    }> => {
+      // Calculate totals in parallel
+      const [friendsCount, boostedCount, friendLikedCount, publicCount] =
+        await Promise.all([
+          // Count friend posts
+          friendIds.length > 0
+            ? supabase
+                .from("posts")
+                .select("id", { count: "exact" })
+                .in("user_id", friendIds)
+                .eq("is_deleted", false)
+                .eq("visibility", PostVisibility.PUBLIC)
+                .then(({ count }) => count || 0)
+            : Promise.resolve(0),
+
+          // Count boosted posts
+          userLocation?.country
+            ? supabase
+                .from("posts")
+                .select("id", { count: "exact" })
+                .eq("post_boosts.status", BoostStatus.ACTIVE)
+                .eq("post_boosts.country", userLocation.country)
+                .eq("is_deleted", false)
+                .gte("post_boosts.expires_at", new Date().toISOString())
+                .not(
+                  "id",
+                  "in",
+                  `(${seenBoosts.length > 0 ? seenBoosts.join(",") : "null"})`
+                )
+                .then(({ count }) => count || 0)
+            : Promise.resolve(0),
+
+          // Count friend-liked posts
+          friendIds.length > 0
+            ? supabase
+                .from("reactions")
+                .select("target_id", { count: "exact" })
+                .in("user_id", friendIds)
+                .eq("target_type", "post")
+                .eq("reaction_type", "like")
+                .then(({ count }) => count || 0)
+            : Promise.resolve(0),
+
+          // Count public posts (excluding user and friends)
+          supabase
+            .from("posts")
+            .select("id", { count: "exact" })
+            .eq("is_deleted", false)
+            .eq("visibility", PostVisibility.PUBLIC)
+            .not("user_id", "in", `(${[userId, ...friendIds].join(",")})`)
+            .then(({ count }) => count || 0),
+        ]);
+
+      // Estimate total based on mixing ratios
+      // Friend posts get priority, then we add estimated mixed content
+      const estimatedTotal = Math.max(
+        friendsCount +
+          Math.min(boostedCount, 20) +
+          Math.min(friendLikedCount, 10) +
+          publicCount,
+        friendsCount || publicCount || 0
+      );
+
+      return {
+        totalFriendsPosts: friendsCount,
+        totalBoostedPosts: boostedCount,
+        totalFriendLikedPosts: friendLikedCount,
+        totalPublicPosts: publicCount,
+        estimatedTotal,
+      };
+    },
+    "Failed to calculate total posts"
+  );
+
+  /**
+   * Get paginated posts with proper offset handling
+   * Private helper method for paginated feed generation
+   */
+  private static getPaginatedFeedData = asyncHandler(
+    async (
+      userId: string,
+      friendIds: string[],
+      userLocation: any,
+      seenBoosts: string[],
+      page: number,
+      limit: number
+    ) => {
+      // Calculate how many posts we need to fetch to support pagination
+      const bufferMultiplier = Math.max(page * 2, 3); // Fetch more data for later pages
+
+      // Fetch larger datasets to support pagination
+      const [friendsPosts, boostedPosts, friendLikedPosts, publicPosts] =
+        await Promise.all([
+          this.getFriendsPostsCached(friendIds, limit * bufferMultiplier),
+          this.getBoostedPostsCached(
+            userLocation,
+            Math.min(page * 3, 10),
+            seenBoosts
+          ), // Scale boosts with page
+          this.getFriendLikedPostsCached(friendIds, Math.min(page * 5, 15), [
+            userId,
+            ...friendIds,
+          ]), // Scale friend-liked
+          this.getPublicPostsCached(limit * bufferMultiplier, [
+            userId,
+            ...friendIds,
+          ]), // Get plenty of public posts
+        ]);
+
+      return {
+        friendsPosts,
+        boostedPosts,
+        friendLikedPosts,
+        publicPosts,
+      };
+    },
+    "Failed to get paginated feed data"
+  );
+
+  /**
+   * Generate paginated mixed feed
+   * Maintains consistent mixing ratios across pages
+   */
+  // private static generatePaginatedFeed = (
+  //   feedData: {
+  //     friendsPosts: any[];
+  //     boostedPosts: any[];
+  //     friendLikedPosts: any[];
+  //     publicPosts: any[];
+  //   },
+  //   page: number,
+  //   limit: number
+  // ): any[] => {
+  //   const { friendsPosts, boostedPosts, friendLikedPosts, publicPosts } =
+  //     feedData;
+
+  //   // Create a large mixed feed first
+  //   const largeMixedFeed = this.simpleFeedMix({
+  //     friendsPosts,
+  //     boostedPosts,
+  //     friendLikedPosts,
+  //     publicPosts,
+  //     limit: limit * Math.max(page * 2, 5), // Generate larger feed for pagination
+  //   });
+  //   console.log(largeMixedFeed, "largeMixedFeed");
+
+  //   // Apply pagination offset
+  //   const startIndex = (page - 1) * limit;
+  //   const endIndex = startIndex + limit;
+
+  //   // Return paginated results
+  //   return largeMixedFeed.slice(startIndex, endIndex);
+  // };
+
+  /**
+   * Get user location with caching
+   * Private helper method for feed generation
+   */
+  private static getUserLocationCached = asyncHandler(
+    async (userId: string) => {
+      // Try cache first
+      let location = await redisService.getUserLocation(userId);
+
+      if (!location) {
+        // Fetch from database
+        const { data, error } = await supabase
+          .from("user_locations")
+          .select("city, country, coordinates")
+          .eq("user_id", userId)
+          .eq("is_active", true)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (error) {
+          logger.warn(`Failed to fetch user location for ${userId}:`, error);
+        }
+
+        location = data || { city: null, country: null };
+
+        // Cache the result
+        await redisService.setUserLocation(userId, location);
+      }
+
+      return location;
+    },
+    "Failed to get user location"
+  );
+
+  /**
+   * Get user friends list with caching
+   * Private helper method for feed generation
+   */
+  private static getUserFriendsCached = asyncHandler(
+    async (userId: string): Promise<string[]> => {
+      // Try cache first
+      let friendIds = await redisService.getUserFriends(userId);
+
+      if (!friendIds) {
+        // Fetch from database
+        const { data, error } = await supabase
+          .from("friendships")
+          .select("requester_id, addressee_id")
+          .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`)
+          .eq("status", FriendshipStatus.ACCEPTED);
+
+        if (error) {
+          logger.warn(`Failed to fetch user friends for ${userId}:`, error);
+          return [];
+        }
+
+        // Extract friend IDs
+        friendIds = (data || []).map(f =>
+          f.requester_id === userId ? f.addressee_id : f.requester_id
+        );
+
+        // Cache the result
+        await redisService.setUserFriends(userId, friendIds);
+      }
+
+      return friendIds;
+    },
+    "Failed to get user friends"
+  );
+
+  /**
+   * Simple feed mixing - fill feed to requested limit
+   * Private helper method for feed generation
+   */
+  private static simpleFeedMix = (options: {
+    friendsPosts: any[];
+    boostedPosts: any[];
+    friendLikedPosts: any[];
+    publicPosts: any[];
+    limit: number;
+  }): any[] => {
+    const { friendsPosts, boostedPosts, friendLikedPosts, publicPosts, limit } =
+      options;
+    const result: any[] = [];
+
+    // Add friend posts first
+    friendsPosts.forEach(post => {
+      if (result.length < limit) {
+        result.push({ ...post, feed_type: "friends" });
+      }
+    });
+
+    // Add boosted posts (intersperse every 3-4 posts)
+    const availableBoosted = [...boostedPosts];
+    let boostIndex = 3; // Start adding boosts at position 3
+
+    while (availableBoosted.length > 0 && result.length < limit) {
+      if (result.length >= boostIndex) {
+        const boostedPost = availableBoosted.shift();
+        if (boostedPost) {
+          result.splice(boostIndex, 0, {
+            ...boostedPost,
+            feed_type: "boosted",
+          });
+          boostIndex += 4; // Next boost position
+        }
+      } else {
+        break;
+      }
+    }
+
+    // Add friend-liked posts (every 5th position after friends posts)
+    // Filter out posts already in feed to avoid duplicates for friend-liked
+    const usedPostIds = result.map(post => post.id);
+    const availableFriendLiked = friendLikedPosts.filter(
+      post => !usedPostIds.includes(post.id)
+    );
+
+    let friendLikedIndex = 4; // Start at position 4
+    availableFriendLiked.forEach(post => {
+      if (result.length >= friendLikedIndex && result.length < limit) {
+        result.splice(friendLikedIndex, 0, {
+          ...post,
+          feed_type: "friend_liked",
+        });
+        friendLikedIndex += 5; // Next friend-liked post position
+      }
+    });
+
+    // Fill remaining slots with public posts
+    // Remove boosted posts from public posts to avoid confusion
+    const boostedPostIds = boostedPosts.map(post => post.id);
+    const availablePublic = publicPosts.filter(
+      post => !boostedPostIds.includes(post.id)
+    );
+
+    availablePublic.forEach(post => {
+      if (result.length < limit) {
+        result.push({ ...post, feed_type: "public" });
+      }
+    });
+
+    // If still not enough, add remaining boosted posts
+    availableBoosted.forEach(post => {
+      if (result.length < limit) {
+        result.push({ ...post, feed_type: "boosted" });
+      }
+    });
+
+    return result.slice(0, limit);
+  };
+
+  /**
+   * Get boosted posts with location targeting and deduplication
+   * Private helper method for feed generation
+   */
+  private static getBoostedPostsCached = asyncHandler(
+    async (
+      userLocation: { city: string | null; country: string | null },
+      targetCount: number,
+      seenBoosts: string[]
+    ) => {
+      const { country } = userLocation;
+      const boostedPosts: any[] = [];
+
+      // Get location-targeted boosts only (if user has location)
+      if (country) {
+        let locationBoosts = await redisService.getBoostedPosts(country);
+
+        if (!locationBoosts) {
+          const { data, error } = await supabase
+            .from("posts")
+            .select(
+              `
+              *, 
+              post_media(*), 
+              users!inner(username, first_name, last_name, profile_picture),
+              post_boosts!inner(status, city, country, expires_at)
+            `
+            )
+            .eq("post_boosts.status", BoostStatus.ACTIVE)
+            .eq("post_boosts.country", country)
+            .eq("is_deleted", false)
+            .gte("post_boosts.expires_at", new Date().toISOString())
+            .order("created_at", { ascending: false })
+            .limit(20); // Reasonable limit for location boosts
+
+          if (error) {
+            logger.warn("Failed to fetch location boosted posts:", error);
+            locationBoosts = [];
+          } else {
+            locationBoosts = data || [];
+            await redisService.setBoostedPosts(country, locationBoosts);
+          }
+        }
+
+        boostedPosts.push(...(locationBoosts || []));
+      }
+
+      // Remove duplicates and filter out seen posts
+      const uniqueBoosts = boostedPosts
+        .filter(
+          (post, index, self) =>
+            // Remove duplicates by ID
+            self.findIndex(p => p.id === post.id) === index &&
+            // // Remove posts user has already seen
+            !seenBoosts.includes(post.id)
+        )
+        .slice(0, Math.ceil(targetCount * 1.5)); // Get extra for rotation
+      console.log(uniqueBoosts, "uniqueBoosts");
+      console.log(seenBoosts, "uniqueBoosts");
+
+      return uniqueBoosts;
+    },
+    "Failed to get boosted posts"
+  );
+
+  /**
+   * Get friends posts with caching
+   * Private helper method for feed generation
+   */
+  private static getFriendsPostsCached = asyncHandler(
+    async (friendIds: string[], targetCount: number) => {
+      if (friendIds.length === 0) return [];
+
+      // For simplicity, we'll fetch fresh friends posts for now
+      // In production, you might want to cache this per friend combination
+      const { data, error } = await supabase
+        .from("posts")
+        .select(
+          `
+          *, 
+          post_media(*), 
+          users!inner(username, first_name, last_name, profile_picture)
+        `
+        )
+        .in("user_id", friendIds)
+        .eq("is_deleted", false)
+        .in("visibility", [PostVisibility.PUBLIC, PostVisibility.FRIENDS])
+        .order("created_at", { ascending: false })
+        .limit(Math.ceil(targetCount * 1.5)); // Get extra for mixing
+
+      if (error) {
+        logger.warn("Failed to fetch friends posts:", error);
+        return [];
+      }
+
+      return data || [];
+    },
+    "Failed to get friends posts"
+  );
+
+  /**
+   * Get location-based posts with caching
+   * Private helper method for feed generation
+   */
+  //   private static getLocationPostsCached = asyncHandler(
+  //     async (
+  //       userLocation: { city: string | null; country: string | null },
+  //       targetCount: number,
+  //       page: number = 1
+  //     ) => {
+  //       const { city, country } = userLocation;
+
+  //       if (!city || !country) return [];
+
+  //       // Try cache first
+  //       let locationPosts = await redisService.getLocationPosts(
+  //         city,
+  //         country,
+  //         page
+  //       );
+
+  //       if (!locationPosts) {
+  //         // Note: This assumes posts will eventually have location data
+  //         // For now, we'll return empty array since organic posts don't have location
+  //         // In the future, you might want to implement location-based organic posts
+  //         locationPosts = [];
+
+  //         // Cache the empty result to avoid repeated queries
+  //         await redisService.setLocationPosts(city, country, page, locationPosts);
+  //       }
+
+  //       return locationPosts;
+  //     },
+  //     "Failed to get location posts"
+  //   );
+
+  /**
+   * Get posts that user's friends have liked
+   * Shows posts user might be interested in based on friend activity
+   */
+  private static getFriendLikedPostsCached = asyncHandler(
+    async (
+      friendIds: string[],
+      targetCount: number,
+      excludeUserIds: string[] = []
+    ) => {
+      if (friendIds.length === 0) return [];
+
+      // Try cache first (simple approach for now)
+      const cacheKey = `friend_liked_posts:${friendIds.sort().join(",")}`;
+      let friendLikedPosts: any[] = (await redisService.get(cacheKey)) || [];
+
+      if (friendLikedPosts.length === 0) {
+        // Get posts that friends have liked (recent reactions first)
+        const { data: reactionData, error } = await supabase
+          .from("reactions")
+          .select("target_id, created_at")
+          .in("user_id", friendIds) // Reactions from user's friends
+          .eq("target_type", "post") // Only post reactions
+          .eq("reaction_type", "like") // Only likes
+          .order("created_at", { ascending: false }) // Recent likes first
+          .limit(targetCount * 3); // Get extra for filtering
+
+        console.log(reactionData, "reactionData");
+
+        if (error) {
+          logger.warn("Failed to fetch friend reactions:", error);
+          return [];
+        }
+
+        if (!reactionData || reactionData.length === 0) {
+          return [];
+        }
+
+        // Get unique post IDs
+        const likedPostIds = [...new Set(reactionData.map(r => r.target_id))];
+
+        // Now fetch the actual posts
+        let postsQuery = supabase
+          .from("posts")
+          .select(
+            `
+            *,
+            post_media(*),
+            users!inner(username, first_name, last_name, profile_picture)
+          `
+          )
+          .in("id", likedPostIds)
+          .eq("is_deleted", false)
+          .eq("visibility", PostVisibility.PUBLIC)
+          .limit(targetCount * 2);
+
+        // Exclude specific users if provided
+        if (excludeUserIds.length > 0) {
+          postsQuery = postsQuery.not(
+            "user_id",
+            "in",
+            `(${excludeUserIds.join(",")})`
+          );
+        }
+
+        const { data: postsData, error: postsError } = await postsQuery;
+        console.log(postsData, "postsData react frined");
+
+        if (postsError) {
+          logger.warn("Failed to fetch friend-liked posts:", postsError);
+          return [];
+        }
+
+        // Sort posts by reaction time (most recently liked first)
+        const sortedPosts = (postsData || []).sort((a, b) => {
+          const reactionA = reactionData.find(r => r.target_id === a.id);
+          const reactionB = reactionData.find(r => r.target_id === b.id);
+          return (
+            new Date(reactionB?.created_at || 0).getTime() -
+            new Date(reactionA?.created_at || 0).getTime()
+          );
+        });
+
+        friendLikedPosts = sortedPosts;
+
+        console.log(friendLikedPosts, "friendLikedPosts");
+
+        // Cache for 5 minutes (shorter TTL since likes change frequently)
+        await redisService.set(cacheKey, friendLikedPosts, 300);
+      }
+
+      return friendLikedPosts;
+    },
+    "Failed to get friend-liked posts"
+  );
+
+  /**
+   * Get public posts to fill feed with caching
+   * Focuses on recent public posts from any users
+   */
+  private static getPublicPostsCached = asyncHandler(
+    async (targetCount: number, excludeUserIds: string[] = []) => {
+      // Try cache first (using page 1 for simplicity)
+      let publicPosts = await redisService.getPopularPosts(1);
+
+      if (!publicPosts) {
+        let query = supabase
+          .from("posts")
+          .select(
+            `
+            *, 
+            post_media(*), 
+            users!inner(username, first_name, last_name, profile_picture)
+          `
+          )
+          .eq("is_deleted", false)
+          .eq("visibility", PostVisibility.PUBLIC)
+          .order("created_at", { ascending: false }) // Recent posts first
+          .limit(Math.max(targetCount * 2, 50)); // Get plenty for mixing
+
+        // Exclude specific users if provided (avoid duplicates)
+        if (excludeUserIds.length > 0) {
+          query = query.not("user_id", "in", `(${excludeUserIds.join(",")})`);
+        }
+
+        const { data, error } = await query;
+
+        if (error) {
+          logger.warn("Failed to fetch public posts:", error);
+          return [];
+        }
+
+        publicPosts = data || [];
+        await redisService.setPopularPosts(1, publicPosts);
+      }
+
+      return publicPosts;
+    },
+    "Failed to get public posts"
+  );
+
+  // ============= POST MIXING ALGORITHM =============
+
+  /**
+   * Intelligent post mixing algorithm
+   * Distributes different post types according to calculated ratios
+   */
+  //   private static intelligentMixPosts = (options: {
+  //     friendsPosts: any[];
+  //     locationPosts: any[];
+  //     boostedPosts: any[];
+  //     popularPosts: any[];
+  //     composition: any;
+  //     limit: number;
+  //     userId: string;
+  //   }): any[] => {
+  //     const {
+  //       friendsPosts,
+  //       locationPosts,
+  //       boostedPosts,
+  //       popularPosts,
+  //       composition,
+  //       limit,
+  //     } = options;
+
+  //     const result: any[] = [];
+
+  //     // Create post pools with type information
+  //     const postPools = {
+  //       friends: friendsPosts.map((post) => ({ ...post, feed_type: "friends" })),
+  //       location: locationPosts.map((post) => ({
+  //         ...post,
+  //         feed_type: "location",
+  //       })),
+  //       boosted: boostedPosts.map((post) => ({ ...post, feed_type: "boosted" })),
+  //       popular: popularPosts.map((post) => ({ ...post, feed_type: "popular" })),
+  //     };
+
+  //     // Create weighted distribution slots
+  //     const slots = this.createWeightedSlots(limit, composition);
+
+  //     // Fill slots with posts
+  //     for (const slot of slots) {
+  //       const pool = postPools[slot.type as keyof typeof postPools];
+
+  //       if (pool && pool.length > 0) {
+  //         // Take the first post from the pool
+  //         const post = pool.shift();
+  //         if (post) {
+  //           result.push(post);
+  //         }
+  //       } else {
+  //         // Fallback to other types if current type is empty
+  //         const fallbackPost = this.getFallbackPost(postPools);
+  //         if (fallbackPost) {
+  //           result.push({ ...fallbackPost, feed_type: "fallback" });
+  //         }
+  //       }
+  //     }
+
+  //     return result;
+  //   };
+
+  /**
+   * Create weighted distribution slots based on composition ratios
+   * Private helper for post mixing
+   */
+  //   private static createWeightedSlots = (
+  //     limit: number,
+  //     composition: any
+  //   ): Array<{ type: string; priority: number }> => {
+  //     const { friends, location, boosted } = composition;
+
+  //     // Calculate actual counts based on ratios
+  //     const friendsCount = Math.round((friends / composition.totalSlots) * limit);
+  //     const locationCount = Math.round(
+  //       (location / composition.totalSlots) * limit
+  //     );
+  //     const boostedCount = Math.round((boosted / composition.totalSlots) * limit);
+  //     const popularCount = limit - friendsCount - locationCount - boostedCount;
+
+  //     // Create base distribution
+  //     const distribution = [
+  //       ...Array(friendsCount).fill({ type: "friends", priority: 3 }),
+  //       ...Array(locationCount).fill({ type: "location", priority: 2 }),
+  //       ...Array(boostedCount).fill({ type: "boosted", priority: 1 }),
+  //       ...Array(Math.max(0, popularCount)).fill({
+  //         type: "popular",
+  //         priority: 1,
+  //       }),
+  //     ];
+
+  //     // Shuffle for natural distribution (avoid clustering)
+  //     const shuffled = this.shuffleArray(distribution);
+
+  //     // Ensure boosted posts are well-distributed (every 3-4 posts)
+  //     return this.optimizeBoostedDistribution(shuffled, boostedCount);
+  //   };
+
+  /**
+   * Shuffle array for natural post distribution
+   * Private helper for post mixing
+   */
+  // private static shuffleArray = <T>(array: T[]): T[] => {
+  //   const shuffled = [...array];
+  //   for (let i = shuffled.length - 1; i > 0; i--) {
+  //     const j = Math.floor(Math.random() * (i + 1));
+  //     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  //   }
+  //   return shuffled;
+  // };
+
+  /**
+   * Optimize boosted post distribution to avoid clustering
+   * Private helper for post mixing
+   */
+  //   private static optimizeBoostedDistribution = (
+  //     slots: Array<{ type: string; priority: number }>,
+  //     boostedCount: number
+  //   ): Array<{ type: string; priority: number }> => {
+  //     if (boostedCount === 0) return slots;
+
+  //     const optimized = [...slots];
+  //     const interval = Math.floor(slots.length / boostedCount);
+
+  //     // Move boosted posts to evenly distributed positions
+  //     const boostedSlots = optimized.filter((slot) => slot.type === "boosted");
+  //     const nonBoostedSlots = optimized.filter((slot) => slot.type !== "boosted");
+
+  //     const result: Array<{ type: string; priority: number }> = [];
+  //     let boostedIndex = 0;
+  //     let nonBoostedIndex = 0;
+
+  //     for (let i = 0; i < slots.length; i++) {
+  //       // Place boosted post every 'interval' positions
+  //       if (i > 0 && i % interval === 0 && boostedIndex < boostedSlots.length) {
+  //         result.push(boostedSlots[boostedIndex++]);
+  //       } else if (nonBoostedIndex < nonBoostedSlots.length) {
+  //         result.push(nonBoostedSlots[nonBoostedIndex++]);
+  //       }
+  //     }
+
+  //     // Add any remaining posts
+  //     while (boostedIndex < boostedSlots.length) {
+  //       result.push(boostedSlots[boostedIndex++]);
+  //     }
+  //     while (nonBoostedIndex < nonBoostedSlots.length) {
+  //       result.push(nonBoostedSlots[nonBoostedIndex++]);
+  //     }
+
+  //     return result.slice(0, slots.length);
+  //   };
+
+  /**
+   * Get fallback post when preferred type is unavailable
+   * Private helper for post mixing
+   */
+  //   private static getFallbackPost = (postPools: any): any => {
+  //     // Priority order for fallback: friends > popular > location > boosted
+  //     const fallbackOrder = ["friends", "popular", "location", "boosted"];
+
+  //     for (const type of fallbackOrder) {
+  //       const pool = postPools[type];
+  //       if (pool && pool.length > 0) {
+  //         return pool.shift();
+  //       }
+  //     }
+
+  //     return null;
+  //   };
+
+  /**
+   * Track seen boosted posts for deduplication
+   * Private helper for analytics and deduplication
+   */
+  private static trackSeenBoosts = async (
+    userId: string,
+    posts: any[]
+  ): Promise<void> => {
+    const boostedPosts = posts.filter(post => post.feed_type === "boosted");
+
+    for (const post of boostedPosts) {
+      await redisService.addSeenBoost(userId, post.id);
+    }
+  };
+
+  // ============= MAIN FEED METHOD =============
+
   /**
    * Get posts for the feed with pagination
    * Includes posts from user and their friends, or popular posts if no friends
@@ -200,7 +993,7 @@ export class PostService {
       userId: string,
       page = 1,
       limit = 10
-    ): Promise<{ posts: Post[]; total: number }> => {
+    ): Promise<{ posts: Post[]; total: number; composition?: any }> => {
       // Validate pagination parameters
       if (page < 1) {
         throw new AppError("Page number must be greater than 0", 400);
@@ -212,88 +1005,106 @@ export class PostService {
         throw new AppError("Limit cannot exceed 50 posts per page", 400);
       }
 
-      const offset = (page - 1) * limit;
-
-      // Get user's friends
-      const { data: friendships, error: friendshipsError } = await supabase
-        .from("friendships")
-        .select("requester_id, addressee_id")
-        .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`)
-        .eq("status", FriendshipStatus.ACCEPTED);
-
-      if (friendshipsError) {
-        throw new AppError(friendshipsError.message, 400);
-      }
-
-      // Extract friend IDs
-      const friendIds = friendships.map((f) =>
-        f.requester_id === userId ? f.addressee_id : f.requester_id
-      );
-
-      // If user has no friends, show default posts
-      if (friendIds.length === 0) {
-        const {
-          data: defaultPosts,
-          error: defaultError,
-          count: defaultCount,
-        } = await supabase
-          .from("posts")
-          .select(
-            "*, post_media(*), users!inner(username, first_name, last_name, profile_picture)",
-            {
-              count: "exact",
-            }
-          )
-          .eq("is_deleted", false)
-          .eq("visibility", PostVisibility.PUBLIC)
-          .neq("user_id", userId) // Not the current user's posts
-          .order("created_at", { ascending: false })
-          .range(offset, offset + limit - 1);
-
-        if (defaultError) {
-          throw new AppError(defaultError.message, 400);
-        }
-
+      // 1. Try cache first (include total in cache structure)
+      const cachedFeed = await redisService.getUserFeed(userId, page);
+      if (cachedFeed) {
+        const feedResult = cachedFeed as CachedFeedResult;
         return {
-          posts: defaultPosts as unknown as Post[],
-          total: defaultCount || 0,
+          posts: feedResult.posts as unknown as Post[],
+          total: feedResult.total,
+          composition: {
+            cached: true,
+            page,
+            hasMore: page * limit < feedResult.total,
+          },
         };
       }
 
-      // Build feed query for users with friends
-      let query = supabase
-        .from("posts")
-        .select(
-          "*, post_media(*), users!inner(username, first_name, last_name, profile_picture)",
-          {
-            count: "exact",
-          }
-        )
-        .eq("is_deleted", false)
-        .eq("visibility", PostVisibility.PUBLIC);
+      // 2. Get user location (with caching)
+      const userLocation = await this.getUserLocationCached(userId);
 
-      // Include posts from user and their friends
-      query = query.or(
-        `user_id.eq.${userId},and(user_id.in.(${friendIds.join(
-          ","
-        )}),or(visibility.eq.public,visibility.eq.friends))`
+      // 3. Get user friends (with caching)
+      const friendIds = await this.getUserFriendsCached(userId);
+
+      // 4. Get seen boosts for deduplication
+      const seenBoosts = await redisService.getSeenBoosts(userId);
+
+      // 5. Calculate total available posts for proper pagination
+      const totalCounts = await this.calculateTotalAvailablePosts(
+        userId,
+        friendIds,
+        userLocation,
+        seenBoosts
       );
 
-      // Add ordering and pagination
-      query = query
-        .order("created_at", { ascending: false })
-        .range(offset, offset + limit - 1);
+      // 6. Get paginated feed data with proper scaling
+      const feedData = await this.getPaginatedFeedData(
+        userId,
+        friendIds,
+        userLocation,
+        seenBoosts,
+        page,
+        limit
+      );
 
-      // Execute query
-      const { data, error, count } = await query;
+      console.log("Feed data lengths:", {
+        friends: feedData.friendsPosts.length,
+        boosted: feedData.boostedPosts.length,
+        friendLiked: feedData.friendLikedPosts.length,
+        public: feedData.publicPosts.length,
+      });
 
-      if (error) {
-        throw new AppError(error.message, 400);
-      }
+      // 7. Generate mixed feed directly (simpler approach)
+      const mixedFeed = this.simpleFeedMix({
+        friendsPosts: feedData.friendsPosts,
+        boostedPosts: feedData.boostedPosts,
+        friendLikedPosts: feedData.friendLikedPosts,
+        publicPosts: feedData.publicPosts,
+        limit,
+      });
+
+      console.log(
+        "Direct mixed feed:",
+        mixedFeed.map(p => ({ id: p.id, feed_type: p.feed_type }))
+      );
+
+      // 8. Track seen boosted posts
+      await this.trackSeenBoosts(userId, mixedFeed);
+
+      // 9. Cache the result with total count
+      const feedResult = {
+        posts: mixedFeed,
+        total: totalCounts.estimatedTotal,
+        page,
+        hasMore: page * limit < totalCounts.estimatedTotal,
+      };
+
+      await redisService.setUserFeed(userId, page, feedResult);
 
       return {
-        posts: data as unknown as Post[],
-        total: count || 0,
+        posts: mixedFeed as unknown as Post[],
+        total: totalCounts.estimatedTotal,
+        composition: {
+          cached: false,
+          page,
+          hasMore: page * limit < totalCounts.estimatedTotal,
+          totalPages: Math.ceil(totalCounts.estimatedTotal / limit),
+          counts: {
+            friends: feedData.friendsPosts.length,
+            boosted: feedData.boostedPosts.length,
+            friendLiked: feedData.friendLikedPosts.length,
+            public: feedData.publicPosts.length,
+            mixed: mixedFeed.length,
+            requested: limit,
+          },
+          totals: {
+            availableFriends: totalCounts.totalFriendsPosts,
+            availableBoosted: totalCounts.totalBoostedPosts,
+            availableFriendLiked: totalCounts.totalFriendLikedPosts,
+            availablePublic: totalCounts.totalPublicPosts,
+            estimatedTotal: totalCounts.estimatedTotal,
+          },
+        },
       };
     },
     "Failed to get feed posts"
@@ -740,7 +1551,7 @@ export class PostService {
       // Fetch the boost to get post_id and days if needed
       const { data: boost, error: fetchError } = await supabase
         .from("post_boosts")
-        .select("id, post_id, days")
+        .select("id, post_id, days, city, country")
         .eq("id", boostId)
         .single();
       if (fetchError || !boost) throw new AppError("Boost not found", 404);
@@ -766,7 +1577,91 @@ export class PostService {
         })
         .eq("id", boostId);
       if (error) throw new AppError(error.message, 400);
+
+      // Invalidate boosted post caches immediately for real-time updates
+      if (boost.city && boost.country) {
+        await redisService.invalidateLocationFeeds(boost.city, boost.country);
+        // Clear specific location boost cache
+        await redisService.delete(
+          redisService.keys.boostedPosts(boost.country)
+        );
+      }
+      // Clear all boosted post caches
+      await redisService.invalidateBoostedPosts();
+
+      // Invalidate all user feeds for immediate boost visibility
+      await redisService.deletePattern("feed:user:*");
     },
     "Failed to activate boost"
   );
+
+  // ============= CACHE INVALIDATION HELPERS =============
+
+  /**
+   * Invalidate friend-liked posts cache when a like is created/removed
+   * Call this method when posts are liked/unliked
+   */
+  static invalidateFriendLikedCache = async (userId: string): Promise<void> => {
+    try {
+      // Get user's friends to invalidate their caches
+      const friendIds = await this.getUserFriendsCached(userId);
+
+      // Invalidate friend-liked posts cache for each friend
+      for (const friendId of friendIds) {
+        // Get friend's friends to build cache key
+        const friendOfFriendIds = await this.getUserFriendsCached(friendId);
+        const cacheKey = `friend_liked_posts:${friendOfFriendIds
+          .sort()
+          .join(",")}`;
+        await redisService.delete(cacheKey);
+
+        // Also invalidate friend's feed cache
+        await redisService.invalidateUserFeed(friendId);
+      }
+
+      logger.info(
+        `Invalidated friend-liked caches for user ${userId} affecting ${friendIds.length} friends`
+      );
+    } catch (error) {
+      logger.warn("Failed to invalidate friend-liked caches:", error);
+    }
+  };
+
+  /**
+   * Invalidate relevant feed caches when posts are created/updated
+   * Private helper method for cache consistency
+   */
+  private static invalidateRelevantFeeds = async (
+    userId: string,
+    location?: any
+  ): Promise<void> => {
+    try {
+      // Invalidate user's own feed
+      await redisService.invalidateUserFeed(userId);
+
+      // Invalidate friends' feeds (they might see this post)
+      const friendIds = await this.getUserFriendsCached(userId);
+      await Promise.all(
+        friendIds.map(friendId => redisService.invalidateUserFeed(friendId))
+      );
+
+      // Invalidate location-based feeds if post has location
+      if (location?.city && location?.country) {
+        await redisService.invalidateLocationFeeds(
+          location.city,
+          location.country
+        );
+      }
+
+      // Invalidate popular posts cache (new post might affect popularity)
+      await redisService.invalidatePopularPosts();
+
+      logger.info(
+        `Invalidated feed caches for user ${userId} and ${friendIds.length} friends`
+      );
+    } catch (error) {
+      // Log but don't throw - cache invalidation shouldn't break the main operation
+      logger.warn("Failed to invalidate feed caches:", error);
+    }
+  };
 }

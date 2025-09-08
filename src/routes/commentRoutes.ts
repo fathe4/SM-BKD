@@ -19,7 +19,7 @@ router.post(
   "/:postId/comments",
   uploadCommentMedia, // Add the upload middleware before validation
   validateCreateComment,
-  CommentController.createComment
+  CommentController.createComment,
 );
 
 /**

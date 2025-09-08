@@ -24,7 +24,7 @@ export class MessageService {
 
       return data as Message;
     },
-    "Failed to create message"
+    "Failed to create message",
   );
 
   /**
@@ -47,7 +47,7 @@ export class MessageService {
 
       return data as Message;
     },
-    "Failed to get message"
+    "Failed to get message",
   );
 
   /**
@@ -58,7 +58,7 @@ export class MessageService {
       messageId: string,
       updateData: Partial<
         Omit<Message, "id" | "chat_id" | "sender_id" | "created_at">
-      >
+      >,
     ): Promise<Message> => {
       const { data, error } = await supabaseAdmin!
         .from("messages")
@@ -73,7 +73,7 @@ export class MessageService {
 
       return data as Message;
     },
-    "Failed to update message"
+    "Failed to update message",
   );
 
   /**
@@ -94,7 +94,7 @@ export class MessageService {
         throw new AppError(error.message, 400);
       }
     },
-    "Failed to delete message"
+    "Failed to delete message",
   );
 
   /**
@@ -129,7 +129,7 @@ export class MessageService {
         }
       }
     },
-    "Failed to mark message as read"
+    "Failed to mark message as read",
   );
 
   /**
@@ -139,7 +139,7 @@ export class MessageService {
     async (
       chatId: string,
       page = 1,
-      limit = 50
+      limit = 50,
     ): Promise<{ messages: Message[]; total: number }> => {
       const offset = (page - 1) * limit;
 
@@ -160,7 +160,7 @@ export class MessageService {
         total: count || 0,
       };
     },
-    "Failed to get chat messages"
+    "Failed to get chat messages",
   );
 
   /**
@@ -168,7 +168,7 @@ export class MessageService {
    */
   static getChatParticipants = asyncHandler(
     async (
-      chatId: string
+      chatId: string,
     ): Promise<Array<{ id: string; username: string }>> => {
       const { data, error } = await supabase
         .from("chat_participants")
@@ -179,7 +179,7 @@ export class MessageService {
             id, 
             username
           )
-        `
+        `,
         )
         .eq("chat_id", chatId);
 
@@ -192,7 +192,7 @@ export class MessageService {
         username: item.users.username,
       }));
     },
-    "Failed to get chat participants"
+    "Failed to get chat participants",
   );
 
   /**

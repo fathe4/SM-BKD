@@ -19,7 +19,7 @@ export class SocketChatPrivacyMiddleware {
    */
   static async canSeeOnlineStatus(
     socket: Socket,
-    targetId: string
+    targetId: string,
   ): Promise<boolean> {
     try {
       const userId = socket.data.user?.id;
@@ -39,7 +39,7 @@ export class SocketChatPrivacyMiddleware {
    */
   static async canSeeLastActive(
     socket: Socket,
-    targetId: string
+    targetId: string,
   ): Promise<boolean> {
     try {
       const userId = socket.data.user?.id;
@@ -59,7 +59,7 @@ export class SocketChatPrivacyMiddleware {
    */
   static async shouldSendReadReceipt(
     socket: Socket,
-    targetId: string
+    targetId: string,
   ): Promise<boolean> {
     try {
       const userId = socket.data.user?.id;
@@ -82,7 +82,7 @@ export class SocketChatPrivacyMiddleware {
    */
   static canAddParticipantsMiddleware = (
     socket: Socket,
-    next: (err?: ExtendedError) => void
+    next: (err?: ExtendedError) => void,
   ) => {
     // Store the original emit function
     const originalEmit = socket.emit;
@@ -111,7 +111,7 @@ export class SocketChatPrivacyMiddleware {
             for (const participantId of participants) {
               const targetSettings =
                 await PrivacySettingsService.getUserPrivacySettings(
-                  participantId
+                  participantId,
                 );
               const allowMessagesFrom =
                 targetSettings.settings.messageSettings?.allowMessagesFrom ||
@@ -127,7 +127,7 @@ export class SocketChatPrivacyMiddleware {
                 const areFriends =
                   await FriendshipService.checkIfUsersAreFriends(
                     userId,
-                    participantId
+                    participantId,
                   );
                 if (!areFriends) {
                   return originalEmit.call(this, "error", {
@@ -140,13 +140,13 @@ export class SocketChatPrivacyMiddleware {
                 const areFriends =
                   await FriendshipService.checkIfUsersAreFriends(
                     userId,
-                    participantId
+                    participantId,
                   );
                 if (!areFriends) {
                   const haveMutualFriends =
                     await FriendshipService.checkIfUsersHaveMutualFriends(
                       userId,
-                      participantId
+                      participantId,
                     );
                   if (!haveMutualFriends) {
                     return originalEmit.call(this, "error", {

@@ -25,7 +25,7 @@ router.get("/", PrivacySettingsController.getMyPrivacySettings);
 router.put(
   "/",
   validatePrivacySettings.fullSettings,
-  PrivacySettingsController.updatePrivacySettings
+  PrivacySettingsController.updatePrivacySettings,
 );
 
 /**
@@ -36,7 +36,7 @@ router.put(
 router.patch(
   "/base",
   validatePrivacySettings.baseSettings,
-  PrivacySettingsController.updateBaseSettings
+  PrivacySettingsController.updateBaseSettings,
 );
 
 /**
@@ -47,7 +47,7 @@ router.patch(
 router.patch(
   "/messages",
   validatePrivacySettings.messageSettings,
-  PrivacySettingsController.updateMessageSettings
+  PrivacySettingsController.updateMessageSettings,
 );
 
 /**

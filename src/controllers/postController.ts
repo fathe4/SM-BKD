@@ -89,7 +89,7 @@ export class PostController {
           const uploadResult = await StorageService.uploadFile(
             "post-media",
             file,
-            userId
+            userId,
           );
 
           return {
@@ -98,7 +98,7 @@ export class PostController {
             media_type: mediaType,
             order: index,
           };
-        })
+        }),
       );
     } else if (req.body.media && Array.isArray(req.body.media)) {
       // Handle media from request body
@@ -170,7 +170,7 @@ export class PostController {
         targetUserId,
         currentUserId,
         page,
-        limit
+        limit,
       );
 
       res.status(200).json({
@@ -183,7 +183,7 @@ export class PostController {
           limit,
         },
       });
-    }
+    },
   );
 
   /**
@@ -199,10 +199,10 @@ export class PostController {
       ? Math.min(50, Math.max(1, parseInt(req.query.limit as string)))
       : 10;
 
-    const { posts, total } = await PostService.getFeedPosts(
+    const { posts, total, composition } = await PostService.getFeedPosts(
       userId,
       page,
-      limit
+      limit,
     );
 
     res.status(200).json({
@@ -213,6 +213,7 @@ export class PostController {
         page,
         totalPages: Math.ceil(total / limit),
         limit,
+        composition,
       },
     });
   });
@@ -248,14 +249,14 @@ export class PostController {
           req.query.isBoosted === "true"
             ? true
             : req.query.isBoosted === "false"
-            ? false
-            : undefined,
+              ? false
+              : undefined,
         isDeleted:
           req.query.isDeleted === "true"
             ? true
             : req.query.isDeleted === "false"
-            ? false
-            : undefined,
+              ? false
+              : undefined,
         sortBy: (req.query.sortBy as string) || "created_at",
         sortOrder: (req.query.sortOrder as "asc" | "desc") || "desc",
         page: req.query.page ? parseInt(req.query.page as string) : 1,
@@ -274,7 +275,7 @@ export class PostController {
           limit: filters.limit,
         },
       });
-    }
+    },
   );
 
   /**
@@ -312,7 +313,7 @@ export class PostController {
       const boost = await PostService.createPostBoost(
         userId,
         postId,
-        boostData
+        boostData,
       );
       res.status(201).json({ status: "success", data: { boost } });
     } catch (error: any) {

@@ -23,7 +23,7 @@ export class PrivacySettingsController {
           privacySettings: privacySettings.settings,
         },
       });
-    }
+    },
   );
 
   /**
@@ -45,7 +45,7 @@ export class PrivacySettingsController {
           privacySettings: updatedSettings.settings,
         },
       });
-    }
+    },
   );
 
   /**
@@ -59,7 +59,7 @@ export class PrivacySettingsController {
       const updatedSettings = await PrivacySettingsService.updatePrivacySection(
         userId,
         "baseSettings",
-        baseSettings
+        baseSettings,
       );
 
       res.status(200).json({
@@ -68,7 +68,7 @@ export class PrivacySettingsController {
           baseSettings: updatedSettings.settings.baseSettings,
         },
       });
-    }
+    },
   );
 
   /**
@@ -82,7 +82,7 @@ export class PrivacySettingsController {
       const updatedSettings = await PrivacySettingsService.updatePrivacySection(
         userId,
         "messageSettings",
-        messageSettings
+        messageSettings,
       );
 
       res.status(200).json({
@@ -91,7 +91,7 @@ export class PrivacySettingsController {
           messageSettings: updatedSettings.settings.messageSettings,
         },
       });
-    }
+    },
   );
 
   /**
@@ -110,6 +110,6 @@ export class PrivacySettingsController {
           privacySettings: DEFAULT_EXTENDED_PRIVACY_SETTINGS,
         },
       });
-    }
+    },
   );
 }

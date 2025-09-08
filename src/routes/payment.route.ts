@@ -16,7 +16,7 @@ const router = Router();
 router.post(
   "/webhook",
   express.raw({ type: "application/json" }),
-  handleStripeWebhookController
+  handleStripeWebhookController,
 );
 
 router.use(express.json());
