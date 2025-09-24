@@ -16,7 +16,12 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src/**/*", "jest.config.js"],
+  "include": [
+    "src/**/*",
+    "jest.config.js",
+    "tests/statsService.test.ts",
+    "tests/subscriptionStatusJob.test.ts"
+  ],
   "typeRoots": ["./node_modules/@types", "./src/types"],
   "exclude": ["node_modules", "dist"]
 }
