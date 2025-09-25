@@ -53,6 +53,11 @@ class RedisService {
     POPULAR_POSTS: 900, // 15 minutes (popular posts change slowly)
     SEEN_BOOSTS: 86400, // 24 hours (deduplication tracking)
     FEED_ENGAGEMENT: 86400, // 24 hours (analytics)
+
+    // User service TTLs
+    USER_BASIC: 1800, // 30 minutes (basic user data)
+    USER_MARKETPLACE: 900, // 15 minutes (marketplace stats)
+    USER_SUBSCRIPTION: 1800, // 30 minutes (subscription details)
   };
 
   /**
@@ -67,7 +72,7 @@ class RedisService {
     if (!redisUrl) {
       throw new AppError(
         "REDIS_URL is not defined in environment variables",
-        400,
+        400
       );
     }
 
@@ -84,7 +89,7 @@ class RedisService {
 
     this.client = new Redis(redisUrl, {
       tls: {},
-      retryStrategy: (times) => Math.min(times * 50, 2000),
+      retryStrategy: times => Math.min(times * 50, 2000),
     });
 
     this.client.on("connect", () => {
@@ -92,7 +97,7 @@ class RedisService {
       this.isConnected = true;
     });
 
-    this.client.on("error", (err) => {
+    this.client.on("error", err => {
       console.error("❌ Redis connection error:", err);
       this.isConnected = false;
     });
@@ -120,6 +125,35 @@ class RedisService {
    */
   isReady(): boolean {
     return this.isConnected && this.client !== null;
+  }
+
+  /**
+   * Get TTL values
+   */
+  getTTL() {
+    return {
+      CHAT_SUMMARY: 300, // 5 minutes
+      CHAT_LIST: 60, // 1 minute
+      DIRECT_CHAT: 3600, // 1 hour
+      UNREAD_COUNT: 30, // 30 seconds
+      RECENT_MESSAGES: 120, // 2 minutes
+      USER_PARTICIPANTS: 300, // 5 minutes
+
+      // Feed system TTLs
+      USER_FEED: 300, // 5 minutes (main feed cache)
+      USER_LOCATION: 3600, // 1 hour (location doesn't change often)
+      USER_FRIENDS: 1800, // 30 minutes (friends list)
+      LOCATION_POSTS: 600, // 10 minutes (location posts change less frequently)
+      BOOSTED_POSTS: 180, // 3 minutes (boosted posts need fresher data)
+      POPULAR_POSTS: 900, // 15 minutes (popular posts change slowly)
+      SEEN_BOOSTS: 86400, // 24 hours (deduplication tracking)
+      FEED_ENGAGEMENT: 86400, // 24 hours (analytics)
+
+      // User service TTLs
+      USER_BASIC: 1800, // 30 minutes (basic user data)
+      USER_MARKETPLACE: 900, // 15 minutes (marketplace stats)
+      USER_SUBSCRIPTION: 1800, // 30 minutes (subscription details)
+    };
   }
 
   /**
@@ -176,6 +210,11 @@ class RedisService {
     // Analytics (optional)
     feedEngagement: (userId: string, date: string) =>
       `analytics:feed:${userId}:${date}`,
+
+    // User service keys
+    userBasic: (userId: string) => `user:basic:${userId}`,
+    userMarketplace: (userId: string) => `user:marketplace:${userId}`,
+    userSubscription: (userId: string) => `user:subscription:${userId}`,
   };
 
   // ============= GENERIC CACHE OPERATIONS =============
@@ -253,7 +292,7 @@ class RedisService {
   async setUserFeed(
     userId: string,
     page: number,
-    feedResult: CachedFeedResult | CachedPost[],
+    feedResult: CachedFeedResult | CachedPost[]
   ): Promise<void> {
     const key = this.keys.userFeed(userId, page);
     await this.set(key, feedResult, this.TTL.USER_FEED);
@@ -264,7 +303,7 @@ class RedisService {
    */
   async getUserFeed(
     userId: string,
-    page: number,
+    page: number
   ): Promise<CachedFeedResult | CachedPost[] | null> {
     const key = this.keys.userFeed(userId, page);
     return this.get<CachedFeedResult | CachedPost[]>(key);
@@ -364,7 +403,7 @@ class RedisService {
     city: string,
     country: string,
     page: number,
-    posts: CachedPost[],
+    posts: CachedPost[]
   ): Promise<void> {
     const key = this.keys.locationPosts(city, country, page);
     await this.set(key, posts, this.TTL.LOCATION_POSTS);
@@ -376,7 +415,7 @@ class RedisService {
   async getLocationPosts(
     city: string,
     country: string,
-    page: number,
+    page: number
   ): Promise<CachedPost[] | null> {
     const key = this.keys.locationPosts(city, country, page);
     return this.get<CachedPost[]>(key);
@@ -388,7 +427,7 @@ class RedisService {
   async setFriendsPosts(
     userId: string,
     page: number,
-    posts: CachedPost[],
+    posts: CachedPost[]
   ): Promise<void> {
     const key = this.keys.friendsPosts(userId, page);
     await this.set(key, posts, this.TTL.LOCATION_POSTS);
@@ -399,7 +438,7 @@ class RedisService {
    */
   async getFriendsPosts(
     userId: string,
-    page: number,
+    page: number
   ): Promise<CachedPost[] | null> {
     const key = this.keys.friendsPosts(userId, page);
     return this.get<CachedPost[]>(key);
@@ -459,7 +498,7 @@ class RedisService {
   async setChatList(
     userId: string,
     chats: any[],
-    total: number,
+    total: number
   ): Promise<void> {
     const key = this.keys.chatList(userId);
     const totalKey = this.keys.userChatsTotal(userId);
@@ -472,7 +511,7 @@ class RedisService {
    * Get cached chat list
    */
   async getChatList(
-    userId: string,
+    userId: string
   ): Promise<{ chats: any[]; total: number } | null> {
     const key = this.keys.chatList(userId);
     const totalKey = this.keys.userChatsTotal(userId);
@@ -508,7 +547,7 @@ class RedisService {
   async setDirectChat(
     userA: string,
     userB: string,
-    chatId: string | null,
+    chatId: string | null
   ): Promise<void> {
     const key = this.keys.directChat(userA, userB);
     await this.set(key, chatId, this.TTL.DIRECT_CHAT);
@@ -581,17 +620,17 @@ class RedisService {
     await this.delete(
       this.keys.chatSummary(chatId),
       this.keys.recentMessages(chatId),
-      this.keys.chatParticipants(chatId),
+      this.keys.chatParticipants(chatId)
     );
 
     // Also invalidate chat lists for all participants
     // This requires getting participants first
     const participants = await this.get<string[]>(
-      this.keys.chatParticipants(chatId),
+      this.keys.chatParticipants(chatId)
     );
     if (participants) {
       await Promise.all(
-        participants.map((userId) => this.delete(this.keys.chatList(userId))),
+        participants.map(userId => this.delete(this.keys.chatList(userId)))
       );
     }
   }

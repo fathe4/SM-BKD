@@ -28,7 +28,9 @@ import storyRoutes from "./routes/story.routes";
 import paymentRoutes from "./routes/payment.route";
 import subscriptionRoutes from "./routes/subscription.routes";
 import transactionRoutes from "./routes/transactionRoutes";
+import statsRoutes from "./routes/statsRoutes";
 import { setupMessageRetentionJob } from "./jobs/messageRetentionJob";
+import { setupSubscriptionStatusJob } from "./jobs/subscriptionStatusJob";
 import { redisService } from "./services/redis.service";
 
 // Load environment variables
@@ -113,6 +115,9 @@ app.get("/health", async (req: Request, res: Response) => {
 // Initialize the message retention job when server starts
 setupMessageRetentionJob();
 
+// Initialize the subscription status job when server starts
+setupSubscriptionStatusJob();
+
 // API routes
 app.use(`${apiPrefix}/auth`, authRoutes);
 app.use(`${apiPrefix}/profiles`, profileRoutes);
@@ -132,6 +137,7 @@ app.use(`${apiPrefix}/marketplace`, marketplaceRoutes);
 app.use(`${apiPrefix}/stories`, storyRoutes);
 app.use(`${apiPrefix}/subscriptions`, subscriptionRoutes);
 app.use(`${apiPrefix}/transactions`, transactionRoutes);
+app.use(`${apiPrefix}/stats`, statsRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {

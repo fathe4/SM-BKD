@@ -4,10 +4,62 @@ import { Request, Response } from "express";
 import { UserService } from "../services/userService";
 import { logger } from "../utils/logger";
 import { AppError } from "../middlewares/errorHandler";
-import bcrypt from "bcryptjs";
 import { UserRole } from "../types/models";
 
 export class UserController {
+  static async createUser(req: Request, res: Response) {
+    try {
+      const {
+        email,
+        password,
+        first_name,
+        last_name,
+        username,
+        role,
+        profile,
+        ...rest
+      } = req.body;
+
+      // Use consolidated user creation method
+      const { user: newUser, profile: createdProfile } =
+        await UserService.createUserWithValidation({
+          email,
+          password,
+          first_name,
+          last_name,
+          username,
+          role: role || UserRole.USER,
+          is_verified: false,
+          is_active: true,
+          profile,
+          ...rest,
+        });
+
+      // Remove sensitive information
+      const { password_hash: _, ...userWithoutPassword } = newUser;
+
+      res.status(201).json({
+        status: "success",
+        data: {
+          user: userWithoutPassword,
+          profile: createdProfile,
+        },
+      });
+    } catch (error) {
+      logger.error("Error in createUser controller:", error);
+      if (error instanceof AppError) {
+        res.status(error.statusCode).json({
+          status: error.status,
+          message: error.message,
+        });
+      } else {
+        res.status(500).json({
+          status: "error",
+          message: "Something went wrong",
+        });
+      }
+    }
+  }
   /**
    * Get all users with pagination, filtering and search
    * @route GET /api/v1/users
@@ -28,7 +80,7 @@ export class UserController {
 
       // Log processed parameters for debugging
       logger.info(
-        `Processed parameters: page=${page}, limit=${limit}, search=${search}, role=${role}`,
+        `Processed parameters: page=${page}, limit=${limit}, search=${search}, role=${role}`
       );
 
       // Only pass defined parameters to the service
@@ -63,7 +115,7 @@ export class UserController {
       logger.info(`Number of users returned: ${users.length}`);
 
       // Remove sensitive information
-      const safeUsers = users.map((user) => {
+      const safeUsers = users.map(user => {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { password_hash, ...userWithoutPassword } = user;
         return userWithoutPassword;
@@ -135,61 +187,48 @@ export class UserController {
   }
 
   /**
-   * Create a new user
-   * @route POST /api/v1/users
+   * Get a user by ID with detailed information (profile, location, marketplace, subscription)
+   * @route GET /api/v1/users/:id/details
    */
-  static async createUser(req: Request, res: Response) {
+  static async getUserDetails(req: Request, res: Response) {
     try {
+      const { id } = req.params;
       const {
-        email,
-        password,
-        first_name,
-        last_name,
-        username,
-        role,
-        ...rest
-      } = req.body;
+        includeProfile = "true",
+        includeLocation = "true",
+        includeMarketplace = "true",
+        includeSubscription = "true",
+        marketplaceLimit = "5",
+      } = req.query;
 
-      // Check if user already exists
-      const existingUser = await UserService.findUserByEmail(email);
-      if (existingUser) {
-        throw new AppError("Email already in use", 400);
+      const options = {
+        includeProfile: includeProfile === "true",
+        includeLocation: includeLocation === "true",
+        includeMarketplace: includeMarketplace === "true",
+        includeSubscription: includeSubscription === "true",
+        marketplaceLimit: parseInt(marketplaceLimit as string) || 5,
+      };
+
+      const userDetails = await UserService.findUserByIdWithDetails(
+        id,
+        options
+      );
+      if (!userDetails) {
+        throw new AppError("User not found", 404);
       }
-
-      // Check if username is taken
-      const existingUsername = await UserService.findUserByUsername(username);
-      if (existingUsername) {
-        throw new AppError("Username already taken", 400);
-      }
-
-      // Hash password
-      const passwordHash = await bcrypt.hash(password, 10);
-
-      // Create user
-      const newUser = await UserService.createUser({
-        email,
-        password_hash: passwordHash,
-        first_name,
-        last_name,
-        username,
-        role: role || UserRole.USER,
-        is_verified: false,
-        is_active: true,
-        ...rest,
-      });
 
       // Remove sensitive information
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { password_hash: _, ...userWithoutPassword } = newUser;
+      const { ...userWithoutPassword } = userDetails;
 
-      res.status(201).json({
+      res.status(200).json({
         status: "success",
         data: {
           user: userWithoutPassword,
         },
       });
     } catch (error) {
-      logger.error("Error in createUser controller:", error);
+      logger.error("Error in getUserDetails controller:", error);
       if (error instanceof AppError) {
         res.status(error.statusCode).json({
           status: error.status,
@@ -203,6 +242,76 @@ export class UserController {
       }
     }
   }
+
+  /**
+   * Create a new user
+   * @route POST /api/v1/users
+   */
+  // static async createUser(req: Request, res: Response) {
+  //   try {
+  //     const {
+  //       email,
+  //       password,
+  //       first_name,
+  //       last_name,
+  //       username,
+  //       role,
+  //       ...rest
+  //     } = req.body;
+
+  //     // Check if user already exists
+  //     const existingUser = await UserService.findUserByEmail(email);
+  //     if (existingUser) {
+  //       throw new AppError("Email already in use", 400);
+  //     }
+
+  //     // Check if username is taken
+  //     const existingUsername = await UserService.findUserByUsername(username);
+  //     if (existingUsername) {
+  //       throw new AppError("Username already taken", 400);
+  //     }
+
+  //     // Hash password
+  //     const passwordHash = await bcrypt.hash(password, 10);
+
+  //     // Create user
+  //     const newUser = await UserService.createUser({
+  //       email,
+  //       password_hash: passwordHash,
+  //       first_name,
+  //       last_name,
+  //       username,
+  //       role: role || UserRole.USER,
+  //       is_verified: false,
+  //       is_active: true,
+  //       ...rest,
+  //     });
+
+  //     // Remove sensitive information
+  //     // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  //     const { password_hash: _, ...userWithoutPassword } = newUser;
+
+  //     res.status(201).json({
+  //       status: "success",
+  //       data: {
+  //         user: userWithoutPassword,
+  //       },
+  //     });
+  //   } catch (error) {
+  //     logger.error("Error in createUser controller:", error);
+  //     if (error instanceof AppError) {
+  //       res.status(error.statusCode).json({
+  //         status: error.status,
+  //         message: error.message,
+  //       });
+  //     } else {
+  //       res.status(500).json({
+  //         status: "error",
+  //         message: "Something went wrong",
+  //       });
+  //     }
+  //   }
+  // }
 
   /**
    * Update a user
@@ -229,7 +338,7 @@ export class UserController {
         updateData.username !== existingUser.username
       ) {
         const existingUsername = await UserService.findUserByUsername(
-          updateData.username,
+          updateData.username
         );
         if (existingUsername) {
           throw new AppError("Username already taken", 400);
@@ -266,7 +375,44 @@ export class UserController {
   }
 
   /**
-   * Delete a user
+   * Delete user completely (with all associated data)
+   * @route DELETE /api/v1/users/:id/complete
+   */
+  static async deleteUserCompletely(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+
+      // Check if user exists
+      const existingUser = await UserService.findUserById(id);
+      if (!existingUser) {
+        throw new AppError("User not found", 404);
+      }
+
+      // Delete user and all associated data
+      await UserService.deleteUserCompletely(id);
+
+      res.status(200).json({
+        status: "success",
+        message: "User and all associated data deleted successfully",
+      });
+    } catch (error) {
+      logger.error("Error in deleteUserCompletely controller:", error);
+      if (error instanceof AppError) {
+        res.status(error.statusCode).json({
+          status: error.status,
+          message: error.message,
+        });
+      } else {
+        res.status(500).json({
+          status: "error",
+          message: "Something went wrong",
+        });
+      }
+    }
+  }
+
+  /**
+   * Delete a user (legacy method - may fail due to foreign key constraints)
    * @route DELETE /api/v1/users/:id
    */
   static async deleteUser(req: Request, res: Response) {

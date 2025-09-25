@@ -58,6 +58,14 @@ router.get(
   PostController.getAllPosts,
 );
 
+// Boost routes - MUST be defined before /:id route to avoid conflicts
+router.post("/:postId/boosts", PostController.createPostBoost);
+router.get("/boosts", PostController.getAllBoostedPosts);
+router.get("/boosts/my", PostController.getUserBoosts);
+router.get("/:postId/boosts/status", PostController.getPostBoostStatus);
+router.patch("/boosts/:boostId/status", PostController.updateBoostStatus);
+router.patch("/boosts/:boostId/activate", PostController.activateBoost);
+
 /**
  * @route GET /api/v1/posts/:id
  * @desc Get a post by ID
@@ -111,12 +119,5 @@ router.patch(
 );
 
 router.delete("/:postId/reactions", ReactionController.deleteReaction);
-
-// Boost routes
-router.post("/:postId/boosts", PostController.createPostBoost);
-router.get("/boosts/my", PostController.getUserBoosts);
-router.get("/:postId/boosts/status", PostController.getPostBoostStatus);
-router.patch("/boosts/:boostId/status", PostController.updateBoostStatus);
-router.patch("/boosts/:boostId/activate", PostController.activateBoost);
 
 export default router;

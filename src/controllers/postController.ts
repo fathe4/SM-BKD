@@ -89,7 +89,7 @@ export class PostController {
           const uploadResult = await StorageService.uploadFile(
             "post-media",
             file,
-            userId,
+            userId
           );
 
           return {
@@ -98,7 +98,7 @@ export class PostController {
             media_type: mediaType,
             order: index,
           };
-        }),
+        })
       );
     } else if (req.body.media && Array.isArray(req.body.media)) {
       // Handle media from request body
@@ -170,7 +170,7 @@ export class PostController {
         targetUserId,
         currentUserId,
         page,
-        limit,
+        limit
       );
 
       res.status(200).json({
@@ -183,7 +183,7 @@ export class PostController {
           limit,
         },
       });
-    },
+    }
   );
 
   /**
@@ -202,7 +202,7 @@ export class PostController {
     const { posts, total, composition } = await PostService.getFeedPosts(
       userId,
       page,
-      limit,
+      limit
     );
 
     res.status(200).json({
@@ -249,14 +249,14 @@ export class PostController {
           req.query.isBoosted === "true"
             ? true
             : req.query.isBoosted === "false"
-              ? false
-              : undefined,
+            ? false
+            : undefined,
         isDeleted:
           req.query.isDeleted === "true"
             ? true
             : req.query.isDeleted === "false"
-              ? false
-              : undefined,
+            ? false
+            : undefined,
         sortBy: (req.query.sortBy as string) || "created_at",
         sortOrder: (req.query.sortOrder as "asc" | "desc") || "desc",
         page: req.query.page ? parseInt(req.query.page as string) : 1,
@@ -275,7 +275,7 @@ export class PostController {
           limit: filters.limit,
         },
       });
-    },
+    }
   );
 
   /**
@@ -313,7 +313,7 @@ export class PostController {
       const boost = await PostService.createPostBoost(
         userId,
         postId,
-        boostData,
+        boostData
       );
       res.status(201).json({ status: "success", data: { boost } });
     } catch (error: any) {
@@ -362,5 +362,93 @@ export class PostController {
     const boostId = req.params.boostId;
     await PostService.activateBoost(boostId);
     res.status(200).json({ status: "success" });
+  });
+
+  /**
+   * Get all boosted posts with comprehensive filtering
+   * @route GET /api/v1/posts/boosts
+   * @query { status, userId, postId, city, country, minAmount, maxAmount, minDays, maxDays, minEstimatedReach, maxEstimatedReach, createdAfter, createdBefore, startDate, endDate, expiresAfter, expiresBefore, includePostDetails, includeUserDetails, limit, offset, sortBy, sortOrder }
+   */
+  static getAllBoostedPosts = controllerHandler(async (req, res) => {
+    const {
+      status,
+      userId,
+      postId,
+      city,
+      country,
+      minAmount,
+      maxAmount,
+      minDays,
+      maxDays,
+      minEstimatedReach,
+      maxEstimatedReach,
+      createdAfter,
+      createdBefore,
+      startDate,
+      endDate,
+      expiresAfter,
+      expiresBefore,
+      includePostDetails,
+      includeUserDetails,
+      limit,
+      offset,
+      sortBy,
+      sortOrder,
+    } = req.query;
+
+    // Parse query parameters
+    const filters: any = {};
+
+    if (status) {
+      filters.status = Array.isArray(status) ? status : [status];
+    }
+    if (userId) filters.userId = userId as string;
+    if (postId) filters.postId = postId as string;
+    if (city) filters.city = city as string;
+    if (country) filters.country = country as string;
+    if (minAmount) filters.minAmount = parseFloat(minAmount as string);
+    if (maxAmount) filters.maxAmount = parseFloat(maxAmount as string);
+    if (minDays) filters.minDays = parseInt(minDays as string);
+    if (maxDays) filters.maxDays = parseInt(maxDays as string);
+    if (minEstimatedReach)
+      filters.minEstimatedReach = parseInt(minEstimatedReach as string);
+    if (maxEstimatedReach)
+      filters.maxEstimatedReach = parseInt(maxEstimatedReach as string);
+    // Handle date filtering - support both startDate/endDate and createdAfter/createdBefore
+    if (startDate) {
+      filters.createdAfter = new Date(startDate as string);
+    } else if (createdAfter) {
+      filters.createdAfter = new Date(createdAfter as string);
+    }
+
+    if (endDate) {
+      filters.createdBefore = new Date(endDate as string);
+    } else if (createdBefore) {
+      filters.createdBefore = new Date(createdBefore as string);
+    }
+    if (expiresAfter) filters.expiresAfter = new Date(expiresAfter as string);
+    if (expiresBefore)
+      filters.expiresBefore = new Date(expiresBefore as string);
+    if (includePostDetails)
+      filters.includePostDetails = includePostDetails === "true";
+    if (includeUserDetails)
+      filters.includeUserDetails = includeUserDetails === "true";
+    if (limit) filters.limit = parseInt(limit as string);
+    if (offset) filters.offset = parseInt(offset as string);
+    if (sortBy) filters.sortBy = sortBy as string;
+    if (sortOrder) filters.sortOrder = sortOrder as string;
+
+    const result = await PostService.getAllBoostedPosts(filters);
+
+    res.status(200).json({
+      status: "success",
+      data: result,
+      pagination: {
+        totalCount: result.totalCount,
+        hasMore: result.hasMore,
+        limit: filters.limit || 50,
+        offset: filters.offset || 0,
+      },
+    });
   });
 }
