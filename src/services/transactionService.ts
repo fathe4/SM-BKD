@@ -123,9 +123,7 @@ export class TransactionService {
         sortOrder = "desc",
       } = filters;
 
-      let query = supabaseAdmin!
-        .from("payments")
-        .select("*");
+      let query = supabase!.from("payments").select("*");
 
       // Apply filters
       if (userId) query = query.eq("user_id", userId);

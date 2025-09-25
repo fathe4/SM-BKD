@@ -1664,4 +1664,212 @@ export class PostService {
       logger.warn("Failed to invalidate feed caches:", error);
     }
   };
+
+  /**
+   * Get all boosted posts with comprehensive filtering options
+   */
+  static getAllBoostedPosts = asyncHandler(
+    async (
+      filters: {
+        status?: BoostStatus | BoostStatus[];
+        userId?: string;
+        postId?: string;
+        city?: string;
+        country?: string;
+        minAmount?: number;
+        maxAmount?: number;
+        minDays?: number;
+        maxDays?: number;
+        minEstimatedReach?: number;
+        maxEstimatedReach?: number;
+        createdAfter?: Date;
+        createdBefore?: Date;
+        expiresAfter?: Date;
+        expiresBefore?: Date;
+        includePostDetails?: boolean;
+        includeUserDetails?: boolean;
+        limit?: number;
+        offset?: number;
+        sortBy?:
+          | "created_at"
+          | "expires_at"
+          | "amount"
+          | "estimated_reach"
+          | "days";
+        sortOrder?: "asc" | "desc";
+      } = {}
+    ): Promise<{
+      boostedPosts: any[];
+      totalCount: number;
+      hasMore: boolean;
+    }> => {
+      const {
+        status,
+        userId,
+        postId,
+        city,
+        country,
+        minAmount,
+        maxAmount,
+        minDays,
+        maxDays,
+        minEstimatedReach,
+        maxEstimatedReach,
+        createdAfter,
+        createdBefore,
+        expiresAfter,
+        expiresBefore,
+        includePostDetails = false,
+        includeUserDetails = false,
+        limit = 20,
+        offset = 0,
+        sortBy = "created_at",
+        sortOrder = "desc",
+      } = filters;
+
+      // Build the select query with proper Supabase syntax
+      let selectQuery = "*";
+
+      if (includePostDetails && includeUserDetails) {
+        selectQuery = `
+          *,
+          posts!post_boosts_post_id_fkey (
+            id,
+            content,
+            media,
+            visibility,
+            view_count,
+            created_at,
+            user_id,
+            is_boosted
+          ),
+          users!post_boosts_user_id_fkey (
+            id,
+            username,
+            first_name,
+            last_name,
+            profile_picture,
+            is_verified
+          )
+        `;
+      } else if (includePostDetails) {
+        selectQuery = `
+          *,
+          posts!post_boosts_post_id_fkey (
+            id,
+            content,
+            media,
+            visibility,
+            view_count,
+            created_at,
+            user_id,
+            is_boosted
+          )
+        `;
+      } else if (includeUserDetails) {
+        selectQuery = `
+          *,
+          users!post_boosts_user_id_fkey (
+            id,
+            username,
+            first_name,
+            last_name,
+            profile_picture,
+            is_verified
+          )
+        `;
+      }
+
+      let query = supabase.from("post_boosts").select(selectQuery);
+
+      // Apply filters
+      if (status) {
+        if (Array.isArray(status)) {
+          query = query.in("status", status);
+        } else {
+          query = query.eq("status", status);
+        }
+      }
+
+      if (userId) {
+        query = query.eq("user_id", userId);
+      }
+
+      if (postId) {
+        query = query.eq("post_id", postId);
+      }
+
+      if (city) {
+        query = query.ilike("city", `%${city}%`);
+      }
+
+      if (country) {
+        query = query.ilike("country", `%${country}%`);
+      }
+
+      if (minAmount !== undefined) {
+        query = query.gte("amount", minAmount);
+      }
+
+      if (maxAmount !== undefined) {
+        query = query.lte("amount", maxAmount);
+      }
+
+      if (minDays !== undefined) {
+        query = query.gte("days", minDays);
+      }
+
+      if (maxDays !== undefined) {
+        query = query.lte("days", maxDays);
+      }
+
+      if (minEstimatedReach !== undefined) {
+        query = query.gte("estimated_reach", minEstimatedReach);
+      }
+
+      if (maxEstimatedReach !== undefined) {
+        query = query.lte("estimated_reach", maxEstimatedReach);
+      }
+
+      if (createdAfter) {
+        query = query.gte("created_at", createdAfter.toISOString());
+      }
+
+      if (createdBefore) {
+        query = query.lte("created_at", createdBefore.toISOString());
+      }
+
+      if (expiresAfter) {
+        query = query.gte("expires_at", expiresAfter.toISOString());
+      }
+
+      if (expiresBefore) {
+        query = query.lte("expires_at", expiresBefore.toISOString());
+      }
+
+      // Apply sorting
+      query = query.order(sortBy, { ascending: sortOrder === "asc" });
+
+      // Apply pagination
+      query = query.range(offset, offset + limit - 1);
+
+      // Execute the query
+      const { data, error, count } = await query;
+
+      if (error) {
+        throw new AppError(error.message, 400);
+      }
+
+      // Get total count for pagination info
+      const totalCount = count || 0;
+      const hasMore = offset + limit < totalCount;
+
+      return {
+        boostedPosts: data || [],
+        totalCount,
+        hasMore,
+      };
+    },
+    "Failed to get boosted posts"
+  );
 }

@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node dist/app.js",
     "dev": "nodemon src/app.ts",
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
+    "build:dev": "tsc",
     "pull-types": "npx supabase@latest gen types typescript --project-id wvtttpjptmuzdtorhoer > src/types/supabase.ts",
     "lint": "eslint . --ext .ts",
     "test": "jest",

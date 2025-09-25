@@ -40,6 +40,18 @@ router.get(
 );
 
 /**
+ * @route GET /api/v1/users/:id/details
+ * @desc Get a user by ID with detailed information (profile, location, marketplace, subscription)
+ * @access Private - Admin or user themselves
+ */
+router.get(
+  "/:id/details",
+  authenticate,
+  canAccessProfile(true, [UserRole.ADMIN]), // Allow own profile or admin
+  UserController.getUserDetails,
+);
+
+/**
  * @route POST /api/v1/users
  * @desc Create a new user
  * @access Private - Admin only
@@ -66,8 +78,20 @@ router.put(
 );
 
 /**
+ * @route DELETE /api/v1/users/:id/complete
+ * @desc Delete a user completely with all associated data
+ * @access Private - Admin only
+ */
+router.delete(
+  "/:id/complete",
+  authenticate,
+  canAccessProfile(false, [UserRole.ADMIN]), // Only admins can access
+  UserController.deleteUserCompletely,
+);
+
+/**
  * @route DELETE /api/v1/users/:id
- * @desc Delete a user
+ * @desc Delete a user (legacy method - may fail due to foreign key constraints)
  * @access Private - Admin only
  */
 router.delete(
