@@ -57,10 +57,10 @@ initializeSocketIO(server);
 
 const corsOptions = {
   origin: [
-    "http://localhost:3000", // Frontend client
-    "http://localhost:4200", // Admin dashboard
+    "http://localhost:3000",
+    "http://localhost:4200",
     "https://dambala.ca",
-    // "https://yourdomain.com" // Add your frontend domain
+    "https://admin.dambala.ca",
   ],
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
