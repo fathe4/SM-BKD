@@ -31,6 +31,8 @@ export interface User extends BaseModel {
   is_verified: boolean;
   is_active: boolean;
   settings?: Record<string, any>;
+  reset_password_token?: string | null;
+  reset_password_expires?: string | null;
 }
 
 // Profile model interface with additional user details
