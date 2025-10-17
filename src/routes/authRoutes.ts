@@ -6,6 +6,11 @@ import {
   validateLogin,
   validateRegister,
 } from "../middlewares/validators/validators";
+import {
+  validateForgotPassword,
+  validateResetPassword,
+  validateVerifyResetToken,
+} from "../middlewares/validators/authValidators";
 
 const router = Router();
 
@@ -45,5 +50,38 @@ router.get("/me", authenticate, AuthController.getCurrentUser);
  * @access Private
  */
 router.post("/logout", authenticate, AuthController.logout);
+
+/**
+ * @route POST /api/v1/auth/forgot-password
+ * @desc Request password reset
+ * @access Public
+ */
+router.post(
+  "/forgot-password",
+  validateForgotPassword,
+  AuthController.forgotPassword
+);
+
+/**
+ * @route POST /api/v1/auth/reset-password
+ * @desc Reset password with token
+ * @access Public
+ */
+router.post(
+  "/reset-password",
+  validateResetPassword,
+  AuthController.resetPassword
+);
+
+/**
+ * @route GET /api/v1/auth/verify-reset-token/:token
+ * @desc Verify if reset token is valid
+ * @access Public
+ */
+router.get(
+  "/verify-reset-token/:token",
+  validateVerifyResetToken,
+  AuthController.verifyResetToken
+);
 
 export default router;

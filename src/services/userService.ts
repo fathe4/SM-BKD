@@ -203,14 +203,14 @@ export class UserService {
         .from("users")
         .select(
           `
-            id, 
-            username, 
-            first_name, 
-            last_name, 
-            profile_picture, 
-            cover_picture, 
-            bio, 
-            location, 
+            id,
+            username,
+            first_name,
+            last_name,
+            profile_picture,
+            cover_picture,
+            bio,
+            location,
             is_verified,
             profiles(*)
           `
@@ -1922,6 +1922,238 @@ export class UserService {
       throw error instanceof AppError
         ? error
         : new AppError("Failed to create user with profile", 500);
+    }
+  }
+
+  /**
+   * Update password reset token for a user
+   * @param userId User ID
+   * @param token Hashed reset token
+   * @param expiresAt Token expiration date
+   * @returns Updated user
+   */
+  static async updatePasswordResetToken(
+    userId: string,
+    token: string | null,
+    expiresAt: Date | null
+  ): Promise<User> {
+    try {
+      const { data, error } = await supabase
+        .from("users")
+        .update({
+          reset_password_token: token,
+          reset_password_expires: expiresAt ? expiresAt.toISOString() : null,
+        })
+        .eq("id", userId)
+        .select()
+        .single();
+
+      if (error) {
+        logger.error("Error updating password reset token:", error);
+        throw new AppError("Failed to update password reset token", 500);
+      }
+
+      return data as User;
+    } catch (error) {
+      logger.error("Error in updatePasswordResetToken:", error);
+      throw error instanceof AppError
+        ? error
+        : new AppError("Failed to update password reset token", 500);
+    }
+  }
+
+  /**
+   * Find user by reset token
+   * @param token Hashed reset token
+   * @returns User or null
+   */
+  static async findUserByResetToken(token: string): Promise<User | null> {
+    try {
+      const { data, error } = await supabase
+        .from("users")
+        .select("*")
+        .eq("reset_password_token", token)
+        .single();
+
+      if (error) {
+        if (error.code === "PGRST116") {
+          // No rows returned
+          return null;
+        }
+        logger.error("Error finding user by reset token:", error);
+        throw new AppError("Failed to find user by reset token", 500);
+      }
+
+      return data as User;
+    } catch (error) {
+      logger.error("Error in findUserByResetToken:", error);
+      if (error instanceof AppError) {
+        throw error;
+      }
+      return null;
+    }
+  }
+
+  /**
+   * Update user password
+   * @param userId User ID
+   * @param hashedPassword New hashed password
+   * @returns Updated user
+   */
+  static async updatePassword(
+    userId: string,
+    hashedPassword: string
+  ): Promise<User> {
+    try {
+      const { data, error } = await supabase
+        .from("users")
+        .update({
+          password_hash: hashedPassword,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", userId)
+        .select()
+        .single();
+
+      if (error) {
+        logger.error("Error updating password:", error);
+        throw new AppError("Failed to update password", 500);
+      }
+
+      return data as User;
+    } catch (error) {
+      logger.error("Error in updatePassword:", error);
+      throw error instanceof AppError
+        ? error
+        : new AppError("Failed to update password", 500);
+    }
+  }
+
+  /**
+   * Search users (public search for authenticated users)
+   * Returns only public user information with Redis caching
+   * @param options Search options
+   * @returns Users and total count
+   */
+  static async searchUsers(options: {
+    search: string;
+    page?: number;
+    limit?: number;
+    sort_by?: string;
+    order?: "asc" | "desc";
+  }): Promise<{ users: User[]; total: number }> {
+    try {
+      const {
+        search,
+        page = 1,
+        limit = 10,
+        sort_by = "username",
+        order = "asc",
+      } = options;
+
+      // Validate search term
+      if (!search || search.trim().length < 2) {
+        return { users: [], total: 0 };
+      }
+
+      const searchTerm = search.trim().toLowerCase();
+
+      // Create cache key based on search parameters
+      const cacheKey = redisService.keys.userSearch(
+        searchTerm,
+        page,
+        limit,
+        sort_by,
+        order
+      );
+
+      // Try to get from cache first
+      const cached = await redisService.get<{ users: User[]; total: number }>(
+        cacheKey
+      );
+
+      if (cached) {
+        logger.debug(`User search cache hit: ${searchTerm}`);
+        return cached;
+      }
+
+      logger.debug(`User search cache miss: ${searchTerm}`);
+
+      // Calculate offset for pagination
+      const offset = (page - 1) * limit;
+
+      // Build query - select only public fields for security
+      let query = supabase
+        .from("users")
+        .select(
+          "id, username, first_name, last_name, profile_picture, bio, is_verified, created_at",
+          { count: "exact" }
+        );
+
+      // Only search active users
+      query = query.eq("is_active", true);
+
+      // Apply search filter across multiple fields
+      query = query.or(
+        `first_name.ilike.%${searchTerm}%,last_name.ilike.%${searchTerm}%,username.ilike.%${searchTerm}%`
+      );
+
+      // Apply sorting
+      const validSortFields = [
+        "username",
+        "first_name",
+        "last_name",
+        "created_at",
+      ];
+      const sortField = validSortFields.includes(sort_by)
+        ? sort_by
+        : "username";
+      query = query.order(sortField, { ascending: order === "asc" });
+
+      // Apply pagination
+      query = query.range(offset, offset + limit - 1);
+
+      // Execute the query
+      const { data, error, count } = await query;
+
+      if (error) {
+        logger.error("Error searching users:", error);
+        throw new AppError(error.message, 400);
+      }
+
+      const result = {
+        users: (data as User[]) || [],
+        total: count || 0,
+      };
+
+      // Cache the results for 5 minutes
+      await redisService.set(
+        cacheKey,
+        result,
+        redisService.getTTL().USER_SEARCH
+      );
+
+      return result;
+    } catch (error) {
+      logger.error("Error in searchUsers:", error);
+      throw error instanceof AppError
+        ? error
+        : new AppError("Failed to search users", 500);
+    }
+  }
+
+  /**
+   * Invalidate user search cache
+   * Call this when a user updates their profile
+   */
+  static async invalidateUserSearchCache(): Promise<void> {
+    try {
+      // Delete all user search cache keys
+      const pattern = "user:search:*";
+      await redisService.deletePattern(pattern);
+      logger.debug("User search cache invalidated");
+    } catch (error) {
+      logger.error("Error invalidating user search cache:", error);
     }
   }
 }

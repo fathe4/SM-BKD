@@ -15,6 +15,18 @@ import { validateUserId } from "../middlewares/validators/friendshipValidator";
 const router = Router();
 
 /**
+ * @route GET /api/v1/users/search
+ * @desc Search users (public endpoint for finding friends)
+ * @access Private - Authenticated users
+ */
+router.get(
+  "/search",
+  authenticate,
+  validateUserSearch,
+  UserController.searchUsers
+);
+
+/**
  * @route GET /api/v1/users
  * @desc Get all users with pagination, filtering and search
  * @access Private - Admin only
@@ -24,7 +36,7 @@ router.get(
   authenticate,
   canAccessProfile(false, [UserRole.ADMIN, UserRole.MODERATOR]), // Only admins can access
   validateUserSearch,
-  UserController.getUsers,
+  UserController.getUsers
 );
 
 /**
@@ -36,7 +48,7 @@ router.get(
   "/:id",
   authenticate,
   canAccessProfile(true, [UserRole.ADMIN]), // Allow own profile or admin
-  UserController.getUser,
+  UserController.getUser
 );
 
 /**
@@ -48,7 +60,7 @@ router.get(
   "/:id/details",
   authenticate,
   canAccessProfile(true, [UserRole.ADMIN]), // Allow own profile or admin
-  UserController.getUserDetails,
+  UserController.getUserDetails
 );
 
 /**
@@ -61,7 +73,7 @@ router.post(
   authenticate,
   canAccessProfile(false, [UserRole.ADMIN]), // Only admins can access
   validateCreateUser,
-  UserController.createUser,
+  UserController.createUser
 );
 
 /**
@@ -74,7 +86,7 @@ router.put(
   authenticate,
   canAccessProfile(true, [UserRole.ADMIN, UserRole.MODERATOR]), // Allow own profile or admin
   validateUpdateUser,
-  UserController.updateUser,
+  UserController.updateUser
 );
 
 /**
@@ -86,7 +98,7 @@ router.delete(
   "/:id/complete",
   authenticate,
   canAccessProfile(false, [UserRole.ADMIN]), // Only admins can access
-  UserController.deleteUserCompletely,
+  UserController.deleteUserCompletely
 );
 
 /**
@@ -98,7 +110,7 @@ router.delete(
   "/:id",
   authenticate,
   canAccessProfile(false, [UserRole.ADMIN]), // Only admins can access
-  UserController.deleteUser,
+  UserController.deleteUser
 );
 
 router.use(
@@ -106,7 +118,7 @@ router.use(
   validateUserId,
   authenticate,
   canAccessProfile(false, [UserRole.ADMIN, UserRole.MODERATOR]),
-  FriendshipController.getUserFriendships,
+  FriendshipController.getUserFriendships
 );
 
 /**
