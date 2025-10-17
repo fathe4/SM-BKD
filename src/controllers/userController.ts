@@ -492,4 +492,81 @@ export class UserController {
   //       }
   //     }
   //   }
+
+  /**
+   * Search users (public endpoint for authenticated users)
+   * Returns only public profile information
+   */
+  static async searchUsers(req: Request, res: Response) {
+    try {
+      const {
+        search,
+        page = 1,
+        limit = 10,
+        sort_by = "username",
+        order = "asc",
+      } = req.query;
+
+      // Validate search term
+      if (!search || typeof search !== "string" || search.trim().length < 2) {
+        return res.status(400).json({
+          status: "fail",
+          message: "Search term must be at least 2 characters long",
+        });
+      }
+
+      // Validate and sanitize limit (max 50 results to prevent abuse)
+      const sanitizedLimit = Math.min(
+        Math.max(parseInt(limit as string) || 10, 1),
+        50
+      );
+      const sanitizedPage = Math.max(parseInt(page as string) || 1, 1);
+
+      // Call service with search query
+      const { users, total } = await UserService.searchUsers({
+        search: search.trim(),
+        page: sanitizedPage,
+        limit: sanitizedLimit,
+        sort_by: sort_by as string,
+        order: order as "asc" | "desc",
+      });
+
+      // Calculate pagination metadata
+      const totalPages = Math.ceil(total / sanitizedLimit);
+
+      res.status(200).json({
+        status: "success",
+        results: users.length,
+        total,
+        page: sanitizedPage,
+        limit: sanitizedLimit,
+        totalPages,
+        data: {
+          users: users.map(user => ({
+            id: user.id,
+            username: user.username,
+            first_name: user.first_name,
+            last_name: user.last_name,
+            profile_picture: user.profile_picture,
+            bio: user.bio,
+            is_verified: user.is_verified,
+            // Exclude sensitive data like email, password_hash, etc.
+          })),
+        },
+      });
+    } catch (error) {
+      logger.error("Error in searchUsers controller:", error);
+      if (error instanceof AppError) {
+        res.status(error.statusCode).json({
+          status: error.status,
+          message: error.message,
+        });
+      } else {
+        res.status(500).json({
+          status: "error",
+          message: "Something went wrong while searching users",
+        });
+      }
+    }
+  }
 }

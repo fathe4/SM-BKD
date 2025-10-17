@@ -58,6 +58,7 @@ class RedisService {
     USER_BASIC: 1800, // 30 minutes (basic user data)
     USER_MARKETPLACE: 900, // 15 minutes (marketplace stats)
     USER_SUBSCRIPTION: 1800, // 30 minutes (subscription details)
+    USER_SEARCH: 300, // 5 minutes (search results)
   };
 
   /**
@@ -153,6 +154,7 @@ class RedisService {
       USER_BASIC: 1800, // 30 minutes (basic user data)
       USER_MARKETPLACE: 900, // 15 minutes (marketplace stats)
       USER_SUBSCRIPTION: 1800, // 30 minutes (subscription details)
+      USER_SEARCH: 300, // 5 minutes (search results)
     };
   }
 
@@ -215,6 +217,13 @@ class RedisService {
     userBasic: (userId: string) => `user:basic:${userId}`,
     userMarketplace: (userId: string) => `user:marketplace:${userId}`,
     userSubscription: (userId: string) => `user:subscription:${userId}`,
+    userSearch: (
+      searchTerm: string,
+      page: number,
+      limit: number,
+      sortBy: string,
+      order: string
+    ) => `user:search:${searchTerm}:${page}:${limit}:${sortBy}:${order}`,
   };
 
   // ============= GENERIC CACHE OPERATIONS =============

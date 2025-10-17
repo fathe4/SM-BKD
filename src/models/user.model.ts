@@ -52,6 +52,8 @@ export interface User {
   is_verified: boolean;
   is_active: boolean;
   settings: UserSettings;
+  reset_password_token?: string | null;
+  reset_password_expires?: Date | null;
 }
 
 export interface UserCreate
