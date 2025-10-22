@@ -121,9 +121,6 @@ export class AuthController {
     try {
       const { email, password, locationData } = req.body;
 
-      console.log(locationData, "locationData");
-      console.log(email, password, "locationData");
-
       // Find user by email
       const user = await UserService.findUserByEmail(email);
       if (!user) {
@@ -152,8 +149,9 @@ export class AuthController {
           role: user.role,
         },
         JWT_SECRET,
-        { algorithm: "HS256", expiresIn: "7d" }
+        { algorithm: "HS256", expiresIn: "30d" }
       );
+      const accessTokenExpires = Date.now() + 60 * 1000;
 
       // Generate refresh token
       const refreshToken = jwt.sign(
@@ -161,7 +159,7 @@ export class AuthController {
           id: user.id,
         },
         JWT_REFRESH_SECRET,
-        { expiresIn: "7d" }
+        { expiresIn: "45d" }
       );
 
       // Track user's device and location if provided
@@ -200,7 +198,8 @@ export class AuthController {
           token,
           refreshToken,
           isPremium,
-          subscription, // optionally include subscription details
+          subscription,
+          accessTokenExpires,
         },
       });
     } catch (error) {
@@ -246,8 +245,6 @@ export class AuthController {
         throw new AppError("Your account has been deactivated", 403);
       }
 
-      // Generate new access token
-
       const newToken = jwt.sign(
         {
           id: user.id,
@@ -257,12 +254,14 @@ export class AuthController {
         JWT_SECRET,
         { expiresIn: "7d" }
       );
+      const accessTokenExpires = Date.now() + 60 * 1000;
 
       res.status(200).json({
         status: "success",
         message: "Token refreshed successfully",
         data: {
           token: newToken,
+          accessTokenExpires,
         },
       });
     } catch (error) {

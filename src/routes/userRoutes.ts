@@ -71,7 +71,7 @@ router.get(
 router.post(
   "/",
   authenticate,
-  canAccessProfile(false, [UserRole.ADMIN]), // Only admins can access
+  canAccessProfile(false, [UserRole.ADMIN]),
   validateCreateUser,
   UserController.createUser
 );
