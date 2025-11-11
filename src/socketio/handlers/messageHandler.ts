@@ -33,7 +33,7 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
 
   if (!userId) {
     logger.warn(
-      `Socket ${socket.id} attempting to use messaging without user ID`,
+      `Socket ${socket.id} attempting to use messaging without user ID`
     );
     socket.disconnect(true);
     return;
@@ -53,9 +53,7 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
       }
 
       // Convert media objects to strings (JSON stringify) if needed
-      const mediaStrings = media
-        ? media.map((item) => JSON.stringify(item))
-        : [];
+      const mediaStrings = media ? media.map(item => JSON.stringify(item)) : [];
 
       // Create message in database
       const message = await enhancedMessageService.createMessage({
@@ -77,14 +75,14 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
       const participants = await messageService.getChatParticipants(chatId);
 
       // Notify all participants to update their chat lists
-      participants.forEach((participant) => {
+      participants.forEach(participant => {
         if (participant.id !== userId) {
           // Don't notify the sender
           // Get socket IDs for this participant
           const participantSocketIds = getUserSocketIds(participant.id);
 
           // Emit chat update event to all their connected devices
-          participantSocketIds.forEach((socketId) => {
+          participantSocketIds.forEach(socketId => {
             io.to(socketId).emit("chats:update", {
               chatId,
               lastMessage: {
@@ -108,11 +106,11 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
             const { chats, total } = await ChatService.getUserChats(
               participant.id,
               1,
-              20,
+              20
             );
 
             // Emit detailed chats to all their connected devices
-            participantSocketIds.forEach((socketId) => {
+            participantSocketIds.forEach(socketId => {
               io.to(socketId).emit("chats:latest", {
                 chats,
                 total,
@@ -125,14 +123,14 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
           } catch (error) {
             logger.error(
               `Error fetching chats for user ${participant.id}:`,
-              error,
+              error
             );
           }
         }
       }
 
       // Send push notification to offline users
-      participants.forEach((participant) => {
+      participants.forEach(participant => {
         if (participant.id !== userId) {
           // Don't notify the sender
           const userStatus = getUserStatus(participant.id);
@@ -140,7 +138,7 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
           if (userStatus.status !== "online") {
             // In a real implementation, queue a push notification here
             logger.debug(
-              `Queuing push notification for offline user ${participant.id}`,
+              `Queuing push notification for offline user ${participant.id}`
             );
           }
         }
@@ -182,7 +180,7 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
         if (senderSocketIds.length > 0) {
           // Emit to all the sender's connected devices
           const socketServer = getIO();
-          senderSocketIds.forEach((socketId) => {
+          senderSocketIds.forEach(socketId => {
             socketServer.to(socketId).emit("message:read", {
               chatId,
               messageId,
@@ -256,7 +254,7 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
           error: "Failed to edit message",
         });
       }
-    },
+    }
   );
 
   // Handle message deletion
@@ -297,34 +295,4 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
       });
     }
   });
-}
-
-/**
- * Calculate auto-delete time based on retention policy
- * @returns Date or undefined if no auto-delete is needed
- */
-function calculateAutoDeleteTime(
-  retentionPeriod: MessageRetentionPeriod,
-): Date | undefined {
-  const now = new Date();
-
-  switch (retentionPeriod) {
-    case MessageRetentionPeriod.ONE_DAY:
-      return new Date(now.getTime() + 24 * 60 * 60 * 1000);
-    case MessageRetentionPeriod.ONE_WEEK:
-      return new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-    case MessageRetentionPeriod.ONE_MONTH:
-      return new Date(now.setMonth(now.getMonth() + 1));
-    case MessageRetentionPeriod.THREE_MONTHS:
-      return new Date(now.setMonth(now.getMonth() + 3));
-    case MessageRetentionPeriod.SIX_MONTHS:
-      return new Date(now.setMonth(now.getMonth() + 6));
-    case MessageRetentionPeriod.ONE_YEAR:
-      return new Date(now.setFullYear(now.getFullYear() + 1));
-    case MessageRetentionPeriod.AFTER_READ:
-      // Messages with AFTER_READ will be deleted by a separate process after being read
-      return undefined;
-    default:
-      return undefined;
-  }
 }

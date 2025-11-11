@@ -1,3 +1,4 @@
+import { redisService } from "./redis.service";
 /* eslint-disable indent */
 // src/services/enhancedMessageService.ts
 import { supabase, supabaseAdmin } from "../config/supabase";
@@ -21,11 +22,11 @@ export class EnhancedMessageService {
       messageData: Omit<
         Message,
         "id" | "created_at" | "is_read" | "is_deleted" | "auto_delete_at"
-      >,
+      >
     ): Promise<Message> => {
       // Calculate auto_delete_at based on retention policy
       const userSettings = await PrivacySettingsService.getUserPrivacySettings(
-        messageData.sender_id,
+        messageData.sender_id
       );
 
       const retentionPeriod =
@@ -35,7 +36,7 @@ export class EnhancedMessageService {
       const autoDeleteAt = this.calculateAutoDeleteTime(retentionPeriod);
 
       // Create message with auto_delete_at
-      const { data, error } = await supabaseAdmin!
+      const { data, error } = await supabase
         .from("messages")
         .insert({
           ...messageData,
@@ -51,10 +52,9 @@ export class EnhancedMessageService {
       if (error) {
         throw new AppError(error.message, 400);
       }
-
       return data as Message;
     },
-    "Failed to create message",
+    "Failed to create message"
   );
 
   /**
@@ -64,7 +64,7 @@ export class EnhancedMessageService {
     async (
       messageId: string,
       userId: string,
-      shouldSendReadReceipt: boolean = true,
+      shouldSendReadReceipt: boolean = true
     ): Promise<{ message: Message; readReceiptSent: boolean }> => {
       // First update the message
       const { data, error } = await supabaseAdmin!
@@ -92,7 +92,7 @@ export class EnhancedMessageService {
       if (participantError) {
         logger.warn(
           `Error updating last_read for user ${userId}:`,
-          participantError,
+          participantError
         );
       }
 
@@ -104,7 +104,7 @@ export class EnhancedMessageService {
         const [userSettings, senderSettings] = await Promise.all([
           PrivacySettingsService.getUserPrivacySettings(userId as UUID),
           PrivacySettingsService.getUserPrivacySettings(
-            message.sender_id as UUID,
+            message.sender_id as UUID
           ),
         ]);
 
@@ -123,7 +123,7 @@ export class EnhancedMessageService {
 
       return { message, readReceiptSent };
     },
-    "Failed to mark message as read",
+    "Failed to mark message as read"
   );
 
   /**
@@ -165,7 +165,7 @@ export class EnhancedMessageService {
         throw new AppError(error.message, 400);
       }
     },
-    "Failed to delete message",
+    "Failed to delete message"
   );
 
   /**
@@ -176,11 +176,11 @@ export class EnhancedMessageService {
       chatId: string,
       userId: string,
       page = 1,
-      limit = 50,
+      limit = 50
     ): Promise<{ messages: Message[]; total: number }> => {
       // First check if user is a participant in this chat
       const chatParticipants = await this.getChatParticipants(chatId);
-      const isParticipant = chatParticipants.some((p) => p.id === userId);
+      const isParticipant = chatParticipants.some(p => p.id === userId);
 
       if (!isParticipant) {
         throw new AppError("You are not a participant in this chat", 403);
@@ -197,12 +197,12 @@ export class EnhancedMessageService {
             sender:users!sender_id(
             id,
             username,
-            first_name, 
+            first_name,
             last_name,
             profile_picture
             )
         `,
-          { count: "exact" },
+          { count: "exact" }
         )
         .eq("chat_id", chatId)
         .eq("is_deleted", false)
@@ -215,10 +215,10 @@ export class EnhancedMessageService {
 
       // Mark unread messages as read if they're from other users
       const unreadMessages = (data as Message[]).filter(
-        (msg) => !msg.is_read && msg.sender_id !== userId,
+        msg => !msg.is_read && msg.sender_id !== userId
       );
 
-      const modifiedData = data.map((message) => ({
+      const modifiedData = data.map(message => ({
         ...message,
         is_read: false,
       }));
@@ -227,7 +227,7 @@ export class EnhancedMessageService {
 
       // Process read statuses in the background (non-blocking)
       if (unreadMessages.length > 0) {
-        this.processUnreadMessages(unreadMessages, userId).catch((err) => {
+        this.processUnreadMessages(unreadMessages, userId).catch(err => {
           logger.error("Error processing unread messages:", err);
         });
       }
@@ -237,7 +237,7 @@ export class EnhancedMessageService {
         total: count || 0,
       };
     },
-    "Failed to get chat messages",
+    "Failed to get chat messages"
   );
 
   /**
@@ -245,7 +245,7 @@ export class EnhancedMessageService {
    */
   static getChatParticipants = asyncHandler(
     async (
-      chatId: string,
+      chatId: string
     ): Promise<Array<{ id: string; username: string }>> => {
       const { data, error } = await supabase
         .from("chat_participants")
@@ -253,10 +253,10 @@ export class EnhancedMessageService {
           `
           user_id,
           users!inner (
-            id, 
+            id,
             username
           )
-        `,
+        `
         )
         .eq("chat_id", chatId);
 
@@ -269,7 +269,7 @@ export class EnhancedMessageService {
         username: item.users.username,
       }));
     },
-    "Failed to get chat participants",
+    "Failed to get chat participants"
   );
 
   /**
@@ -293,7 +293,7 @@ export class EnhancedMessageService {
 
       // Check if user is part of the conversation
       const chatParticipants = await this.getChatParticipants(message.chat_id);
-      const isParticipant = chatParticipants.some((p) => p.id === userId);
+      const isParticipant = chatParticipants.some(p => p.id === userId);
 
       if (!isParticipant && message.sender_id !== userId) {
         return false;
@@ -302,18 +302,18 @@ export class EnhancedMessageService {
       // Check original sender's privacy settings
       const senderSettings =
         await PrivacySettingsService.getUserPrivacySettings(
-          message.sender_id as UUID,
+          message.sender_id as UUID
         );
       return senderSettings.settings.messageSettings?.allowForwarding ?? true;
     },
-    "Failed to check message forwarding permission",
+    "Failed to check message forwarding permission"
   );
 
   /**
    * Calculate auto-delete time based on retention policy
    */
   private static calculateAutoDeleteTime(
-    retentionPeriod: MessageRetentionPeriod,
+    retentionPeriod: MessageRetentionPeriod
   ): Date | undefined {
     const now = new Date();
 
@@ -343,13 +343,13 @@ export class EnhancedMessageService {
    * Process messages that have the AFTER_READ retention policy
    */
   private static async handleAfterReadRetention(
-    message: Message,
+    message: Message
   ): Promise<void> {
     try {
       // Check if the message should be deleted after reading
       const senderSettings =
         await PrivacySettingsService.getUserPrivacySettings(
-          message.sender_id as UUID,
+          message.sender_id as UUID
         );
       const retentionPolicy =
         senderSettings.settings.messageSettings?.messageRetentionPeriod;
@@ -371,7 +371,7 @@ export class EnhancedMessageService {
     } catch (error) {
       logger.error(
         `Error handling after-read retention for message ${message.id}:`,
-        error,
+        error
       );
     }
   }
@@ -382,19 +382,19 @@ export class EnhancedMessageService {
    */
   private static async processUnreadMessages(
     messages: Message[],
-    userId: string,
+    userId: string
   ): Promise<void> {
     try {
       // Get privacy settings for read receipts
       const userSettings = await PrivacySettingsService.getUserPrivacySettings(
-        userId as UUID,
+        userId as UUID
       );
       const userAllowsReadReceipts =
         userSettings.settings.messageSettings?.allowMessageReadReceipts ?? true;
 
       if (!userAllowsReadReceipts) {
         // Just mark as read without sending receipts
-        const messageIds = messages.map((msg) => msg.id);
+        const messageIds = messages.map(msg => msg.id);
         await supabaseAdmin!
           .from("messages")
           .update({ is_read: true })
@@ -404,7 +404,7 @@ export class EnhancedMessageService {
 
       // Group messages by sender
       const messagesBySender: Record<string, Message[]> = {};
-      messages.forEach((msg) => {
+      messages.forEach(msg => {
         if (!messagesBySender[msg.sender_id]) {
           messagesBySender[msg.sender_id] = [];
         }
@@ -413,7 +413,7 @@ export class EnhancedMessageService {
 
       // Process each sender's messages
       for (const [senderId, senderMessages] of Object.entries(
-        messagesBySender,
+        messagesBySender
       )) {
         // Check sender's read receipt preference
         const senderSettings =
@@ -422,7 +422,7 @@ export class EnhancedMessageService {
         //   senderSettings.settings.messageSettings?.allowMessageReadReceipts ??
         //   true;
 
-        const messageIds = senderMessages.map((msg) => msg.id);
+        const messageIds = senderMessages.map(msg => msg.id);
 
         // Update messages as read
         await supabaseAdmin!

@@ -21,7 +21,7 @@ import { redisService } from "./redis.service";
 export class ChatService {
   static findChatByContext = async (
     context_type: string,
-    context_id?: string,
+    context_id?: string
   ) => {
     const query = supabaseAdmin!
       .from("chats")
@@ -80,20 +80,20 @@ export class ChatService {
   static createChat = asyncHandler(
     async (
       chatData: ChatCreate,
-      participants: string[],
+      participants: string[]
     ): Promise<createChatResponse> => {
       // 1. Handle direct duplicate (2 participants only)
       if (chatData.context_type === "direct") {
         if (participants.length !== 1) {
           throw new AppError(
             "Direct chat must have exactly 1 participants",
-            400,
+            400
           );
         }
 
         const existingDirectChat = await ChatService.findDirectChat(
           chatData.creator_id!,
-          participants[0],
+          participants[0]
         );
         if (existingDirectChat) {
           return { chat: existingDirectChat as Chat, isDuplicate: true };
@@ -104,7 +104,7 @@ export class ChatService {
       if (chatData.context_type === "marketplace") {
         const existingChat = await ChatService.findChatByContext(
           "marketplace",
-          chatData.context_id,
+          chatData.context_id
         );
 
         if (existingChat)
@@ -124,7 +124,7 @@ export class ChatService {
 
       // 4. Role assignment
       // eslint-disable-next-line prefer-const
-      let participantsWithChatId = participants.map((userId) => ({
+      let participantsWithChatId = participants.map(userId => ({
         user_id: userId,
         chat_id: chat.id,
         role: MemberRole.MEMBER,
@@ -132,7 +132,7 @@ export class ChatService {
 
       // Add the creator if not already included
       if (
-        !participantsWithChatId.find((p) => p.user_id === chatData.creator_id)
+        !participantsWithChatId.find(p => p.user_id === chatData.creator_id)
       ) {
         participantsWithChatId.push({
           user_id: chatData.creator_id!,
@@ -158,7 +158,7 @@ export class ChatService {
 
       return { chat: chat as Chat, isDuplicate: false };
     },
-    "Failed to create chat",
+    "Failed to create chat"
   );
 
   /**
@@ -201,7 +201,7 @@ export class ChatService {
 
       return data as Chat;
     },
-    "Failed to get chat",
+    "Failed to get chat"
   );
   // /**
   //  * Get all chats for a user with chat summaries
@@ -210,23 +210,21 @@ export class ChatService {
     async (
       userId: string,
       page = 1,
-      limit = 20,
+      limit = 20
     ): Promise<{ chats: ChatSummary[]; total: number }> => {
-      console.log("getUserChats" + new Date());
-
       // Try to get from Redis cache first
       const cachedResult = await redisService.getChatList(userId);
       if (cachedResult) {
         console.log(
           "✅ Cache hit: Returning cached chat list for user",
-          userId,
+          userId
         );
         return cachedResult;
       }
 
       console.log(
         "❌ Cache miss: Fetching chat list from database for user",
-        userId,
+        userId
       );
 
       const offset = (page - 1) * limit;
@@ -250,13 +248,13 @@ export class ChatService {
         return { chats: [], total: 0 };
       }
 
-      const chatIds = chatParticipations.map((p) => p.chat_id);
+      const chatIds = chatParticipations.map(p => p.chat_id);
 
       // Get chat details with last message
       const chatSummaries = await Promise.all(
-        chatIds.map(async (chatId) => {
+        chatIds.map(async chatId => {
           return await this.getChatSummary(chatId, userId);
-        }),
+        })
       );
 
       // Sort by last message timestamp (most recent first)
@@ -286,7 +284,7 @@ export class ChatService {
       console.log("get user chats" + new Date());
       return result;
     },
-    "Failed to get user chats",
+    "Failed to get user chats"
   );
 
   // /**
@@ -320,7 +318,7 @@ export class ChatService {
             username,
             profile_picture
           )
-        `,
+        `
           )
           .eq("chat_id", chatId);
 
@@ -343,8 +341,9 @@ export class ChatService {
           }
 
           // Check privacy settings for other users
-          const settings =
-            await PrivacySettingsService.getUserPrivacySettings(participantId);
+          const settings = await PrivacySettingsService.getUserPrivacySettings(
+            participantId
+          );
           const profileVisibility =
             settings.settings.baseSettings.profileVisibility;
 
@@ -361,7 +360,7 @@ export class ChatService {
           if (profileVisibility === "friends") {
             const areFriends = await FriendshipService.checkIfUsersAreFriends(
               userId as UUID,
-              participantId,
+              participantId
             );
             if (!areFriends) {
               return {
@@ -378,7 +377,7 @@ export class ChatService {
             username: p.users.username,
             profile_picture: p.users.profile_picture,
           };
-        }),
+        })
       );
 
       // Get last message
@@ -393,7 +392,7 @@ export class ChatService {
           users:sender_id (
             username
           )
-        `,
+        `
         )
         .eq("chat_id", chatId)
         .eq("is_deleted", false)
@@ -431,7 +430,7 @@ export class ChatService {
         participants,
       };
     },
-    "Failed to get chat summary",
+    "Failed to get chat summary"
   );
 
   /**
@@ -441,7 +440,7 @@ export class ChatService {
     async (
       chatId: string,
       userId: string,
-      updateData: ChatUpdate,
+      updateData: ChatUpdate
     ): Promise<Chat> => {
       // Verify the user is a participant with admin role
       const isAdmin = await this.isUserChatAdmin(userId, chatId);
@@ -449,7 +448,7 @@ export class ChatService {
       if (!isAdmin) {
         throw new AppError(
           "You don't have permission to update this chat",
-          403,
+          403
         );
       }
 
@@ -466,7 +465,7 @@ export class ChatService {
 
       return data as Chat;
     },
-    "Failed to update chat",
+    "Failed to update chat"
   );
 
   /**
@@ -476,7 +475,7 @@ export class ChatService {
     async (
       chatId: string,
       userId: string,
-      newParticipants: ChatParticipantCreate[],
+      newParticipants: ChatParticipantCreate[]
     ): Promise<void> => {
       // Verify the user is a participant with admin role for group chats
       const chat = await this.getChatById(chatId, userId);
@@ -490,23 +489,24 @@ export class ChatService {
         if (!isAdmin) {
           throw new AppError(
             "You don't have permission to add participants to this chat",
-            403,
+            403
           );
         }
       } else {
         // For direct chats, only allow adding if there are fewer than 2 participants
-        const currentParticipantCount =
-          await this.getChatParticipantCount(chatId);
+        const currentParticipantCount = await this.getChatParticipantCount(
+          chatId
+        );
         if (currentParticipantCount >= 2) {
           throw new AppError(
             "Cannot add more participants to a direct chat",
-            400,
+            400
           );
         }
       }
 
       // Add participants
-      const participantsWithChatId = newParticipants.map((p) => ({
+      const participantsWithChatId = newParticipants.map(p => ({
         ...p,
         chat_id: chatId,
       }));
@@ -519,7 +519,7 @@ export class ChatService {
         throw new AppError(error.message, 400);
       }
     },
-    "Failed to add chat participants",
+    "Failed to add chat participants"
   );
 
   /**
@@ -529,7 +529,7 @@ export class ChatService {
     async (
       chatId: string,
       userId: string,
-      participantId: string,
+      participantId: string
     ): Promise<void> => {
       const chat = await this.getChatById(chatId, userId);
 
@@ -541,13 +541,13 @@ export class ChatService {
       const canRemove = await this.canRemoveParticipant(
         chatId,
         userId,
-        participantId,
+        participantId
       );
 
       if (!canRemove) {
         throw new AppError(
           "You don't have permission to remove this participant",
-          403,
+          403
         );
       }
 
@@ -561,7 +561,7 @@ export class ChatService {
         throw new AppError(error.message, 400);
       }
     },
-    "Failed to remove chat participant",
+    "Failed to remove chat participant"
   );
 
   /**
@@ -593,7 +593,7 @@ export class ChatService {
         await this.deleteChat(chatId);
       }
     },
-    "Failed to leave chat",
+    "Failed to leave chat"
   );
 
   /**
@@ -607,7 +607,7 @@ export class ChatService {
         if (!isAdmin) {
           throw new AppError(
             "You don't have permission to delete this chat",
-            403,
+            403
           );
         }
       }
@@ -642,7 +642,7 @@ export class ChatService {
         throw new AppError(error.message, 400);
       }
     },
-    "Failed to delete chat",
+    "Failed to delete chat"
   );
 
   /**
@@ -663,7 +663,7 @@ export class ChatService {
 
       return !!data;
     },
-    "Failed to check chat participation",
+    "Failed to check chat participation"
   );
 
   /**
@@ -685,7 +685,7 @@ export class ChatService {
 
       return !!data;
     },
-    "Failed to check chat admin status",
+    "Failed to check chat admin status"
   );
 
   static canUserDeleteChat = asyncHandler(
@@ -732,7 +732,7 @@ export class ChatService {
           return role === "admin" || role === "member";
       }
     },
-    "Failed to check chat deletion permission",
+    "Failed to check chat deletion permission"
   );
 
   /**
@@ -751,7 +751,7 @@ export class ChatService {
 
       return count || 0;
     },
-    "Failed to get participant count",
+    "Failed to get participant count"
   );
 
   /**
@@ -763,7 +763,7 @@ export class ChatService {
       options: {
         page?: number;
         limit?: number;
-      } = {},
+      } = {}
     ): Promise<{
       participants: ChatParticipantDetails[];
       total: number;
@@ -784,14 +784,14 @@ export class ChatService {
             last_read,
             users!inner (
               id,
-              username, 
-              first_name, 
-              last_name, 
+              username,
+              first_name,
+              last_name,
               profile_picture,
               is_verified
             )
           `,
-          { count: "exact" },
+          { count: "exact" }
         )
         .eq("chat_id", chatId)
         .range(offset, offset + limit - 1)
@@ -824,7 +824,7 @@ export class ChatService {
         total: count || 0,
       };
     },
-    "Failed to get chat participants",
+    "Failed to get chat participants"
   );
 
   /**
@@ -834,7 +834,7 @@ export class ChatService {
     async (
       chatId: string,
       userId: string,
-      participantId: string,
+      participantId: string
     ): Promise<boolean> => {
       // Users can remove themselves
       if (userId === participantId) {
@@ -849,12 +849,12 @@ export class ChatService {
 
       return false;
     },
-    "Failed to check removal permission",
+    "Failed to check removal permission"
   );
 
   static async findGroupChatByNameAndParticipants(
     name: string,
-    participants: string[],
+    participants: string[]
   ) {
     // 1. Find all group chats with the given name
     const { data: chats, error } = await supabase
@@ -902,7 +902,7 @@ export class ChatService {
 function getChatName(
   chat: Chat,
   participants: any[],
-  currentUserId: string,
+  currentUserId: string
 ): string {
   if (chat.name) {
     return chat.name;
@@ -910,7 +910,7 @@ function getChatName(
 
   if (!chat.is_group_chat) {
     // For direct chats, use the other participant's name
-    const otherParticipant = participants.find((p) => p.id !== currentUserId);
+    const otherParticipant = participants.find(p => p.id !== currentUserId);
     return otherParticipant ? otherParticipant.username : "Chat";
   }
 
@@ -924,7 +924,7 @@ function getChatName(
 function getChatAvatar(
   chat: Chat,
   participants: any[],
-  currentUserId: string,
+  currentUserId: string
 ): string | undefined {
   if (chat.avatar) {
     return chat.avatar;
@@ -932,7 +932,7 @@ function getChatAvatar(
 
   if (!chat.is_group_chat) {
     // For direct chats, use the other participant's avatar
-    const otherParticipant = participants.find((p) => p.id !== currentUserId);
+    const otherParticipant = participants.find(p => p.id !== currentUserId);
     return otherParticipant?.profile_picture || undefined; // Return undefined instead of null
   }
 
