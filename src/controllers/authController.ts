@@ -151,7 +151,8 @@ export class AuthController {
         JWT_SECRET,
         { algorithm: "HS256", expiresIn: "30d" }
       );
-      const accessTokenExpires = Date.now() + 60 * 1000;
+      // 30 days in milliseconds to match JWT expiry
+      const accessTokenExpires = Date.now() + 30 * 24 * 60 * 60 * 1000;
 
       // Generate refresh token
       const refreshToken = jwt.sign(
@@ -254,7 +255,8 @@ export class AuthController {
         JWT_SECRET,
         { expiresIn: "7d" }
       );
-      const accessTokenExpires = Date.now() + 60 * 1000;
+      // 7 days in milliseconds to match JWT expiry
+      const accessTokenExpires = Date.now() + 7 * 24 * 60 * 60 * 1000;
 
       res.status(200).json({
         status: "success",
