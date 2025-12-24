@@ -147,6 +147,27 @@ export class FriendshipService {
         throw new AppError(error.message, 400);
       }
 
+      // Send notification when friend request is accepted
+      if (status === FriendshipStatus.ACCEPTED) {
+        try {
+          // The addressee (who accepted) should notify the requester
+          const accepterProfile = await getUserBasicProfile(data.addressee_id);
+          const accepterName = accepterProfile.first_name && accepterProfile.last_name
+            ? `${accepterProfile.first_name} ${accepterProfile.last_name}`
+            : accepterProfile.username || "Someone";
+
+          await NotificationService.createNotification({
+            user_id: data.requester_id as UUID,
+            actor_id: data.addressee_id as UUID,
+            reference_id: data.id,
+            reference_type: ReferenceType.FRIEND_REQUEST_ACCEPTED,
+            content: `${accepterName} accepted your friend request`,
+          });
+        } catch (notificationError) {
+          logger.error("Failed to create friend request accepted notification:", notificationError);
+        }
+      }
+
       return data as Friendship;
     },
     "Failed to update friendship status",
