@@ -14,6 +14,8 @@ import {
 import { asyncHandler } from "../utils/asyncHandler";
 import { UUID } from "crypto";
 import { logger } from "../utils/logger";
+import { NotificationService } from "./notificationService";
+import { ReferenceType } from "../models/notification.model";
 
 export class FriendshipService {
   /**
@@ -81,6 +83,19 @@ export class FriendshipService {
       if (error) {
         throw new AppError(error.message, 400);
       }
+
+      const requesterProfile = await getUserBasicProfile(requesterId);
+      const requesterName = requesterProfile.first_name && requesterProfile.last_name
+          ? `${requesterProfile.first_name} ${requesterProfile.last_name}`
+          : requesterProfile.username || "Someone";
+
+      await NotificationService.createNotification({
+            user_id: addresseeId as UUID,
+            actor_id: requesterId as UUID,
+            reference_id: data.id,
+            reference_type: ReferenceType.FRIEND_REQUEST,
+            content: `${requesterName} sent you a friend request`,
+      });
 
       return data as Friendship;
     },
@@ -187,9 +202,10 @@ export class FriendshipService {
         status?: FriendshipStatus;
         page?: number;
         limit?: number;
+        withUserId?: string;
       } = {},
     ): Promise<{ friendships: FriendSummary[]; total: number }> => {
-      const { status, page = 1, limit = 10 } = options;
+      const { status, page = 1, limit = 10, withUserId } = options;
       const offset = (page - 1) * limit;
 
       // Start query to get friendships where the user is either requester or addressee
@@ -206,8 +222,17 @@ export class FriendshipService {
           updated_at
         `,
           { count: "exact" },
-        )
-        .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`);
+        );
+
+      // If withUserId is provided, filter to just the friendship between these two users
+      if (withUserId) {
+        query = query.or(
+          `and(requester_id.eq.${userId},addressee_id.eq.${withUserId}),and(requester_id.eq.${withUserId},addressee_id.eq.${userId})`
+        );
+      } else {
+        // Otherwise, get all friendships for this user
+        query = query.or(`requester_id.eq.${userId},addressee_id.eq.${userId}`);
+      }
 
       // Apply status filter if provided
       if (status) {

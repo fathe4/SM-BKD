@@ -38,15 +38,20 @@ export class FriendshipController {
    */
   static getFriendships = controllerHandler(
     async (req: Request, res: Response) => {
-      const userId = req.user!.id;
-      const paramUserId = req.query.userId as string;
+      const currentUserId = req.user!.id;
+      const profileUserId = req.query.userId as string;
       const status = req.query.status as FriendshipStatus | undefined;
       const page = req.query.page ? parseInt(req.query.page as string) : 1;
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
 
       const { friendships, total } = await FriendshipService.getUserFriendships(
-        paramUserId ? paramUserId : userId,
-        { status, page, limit },
+        currentUserId,
+        { 
+          status, 
+          page, 
+          limit,
+          withUserId: profileUserId,
+        },
       );
 
       res.status(200).json({
