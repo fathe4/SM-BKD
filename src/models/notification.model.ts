@@ -4,6 +4,7 @@ export enum ReferenceType {
   POST = "post",
   COMMENT = "comment",
   FRIEND_REQUEST = "friend_request",
+  FRIEND_REQUEST_ACCEPTED = "friend_request_accepted",
   MESSAGE = "message",
   GROUP_INVITE = "group_invite",
   PAGE_INVITE = "page_invite",
