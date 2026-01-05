@@ -304,8 +304,9 @@ export class PostService {
       const bufferMultiplier = Math.max(page * 2, 3); // Fetch more data for later pages
 
       // Fetch larger datasets to support pagination
-      const [friendsPosts, boostedPosts, friendLikedPosts, publicPosts] =
+      const [userPosts, friendsPosts, boostedPosts, friendLikedPosts, publicPosts] =
         await Promise.all([
+          this.getUserOwnPostsCached(userId, limit * bufferMultiplier), // User's own posts
           this.getFriendsPostsCached(friendIds, limit * bufferMultiplier),
           this.getBoostedPostsCached(
             userLocation,
@@ -323,6 +324,7 @@ export class PostService {
         ]);
 
       return {
+        userPosts,
         friendsPosts,
         boostedPosts,
         friendLikedPosts,
@@ -439,85 +441,55 @@ export class PostService {
   );
 
   /**
-   * Simple feed mixing - fill feed to requested limit
+   * Simple feed mixing - sort all posts chronologically (newest first)
    * Private helper method for feed generation
    */
   private static simpleFeedMix = (options: {
+    userPosts: any[];
     friendsPosts: any[];
     boostedPosts: any[];
     friendLikedPosts: any[];
     publicPosts: any[];
+    page: number;
     limit: number;
   }): any[] => {
-    const { friendsPosts, boostedPosts, friendLikedPosts, publicPosts, limit } =
+    const { userPosts, friendsPosts, boostedPosts, friendLikedPosts, publicPosts, page, limit } =
       options;
-    const result: any[] = [];
 
-    // Add friend posts first
-    friendsPosts.forEach(post => {
-      if (result.length < limit) {
-        result.push({ ...post, feed_type: "friends" });
-      }
-    });
+    // Tag all posts with their feed type
+    const taggedUserPosts = userPosts.map(post => ({ ...post, feed_type: "own" }));
+    const taggedFriendsPosts = friendsPosts.map(post => ({ ...post, feed_type: "friends" }));
+    const taggedBoostedPosts = boostedPosts.map(post => ({ ...post, feed_type: "boosted" }));
+    const taggedFriendLikedPosts = friendLikedPosts.map(post => ({ ...post, feed_type: "friend_liked" }));
+    const taggedPublicPosts = publicPosts.map(post => ({ ...post, feed_type: "public" }));
 
-    // Add boosted posts (intersperse every 3-4 posts)
-    const availableBoosted = [...boostedPosts];
-    let boostIndex = 3; // Start adding boosts at position 3
+    // Combine all posts
+    const allPosts = [
+      ...taggedUserPosts,
+      ...taggedFriendsPosts,
+      ...taggedBoostedPosts,
+      ...taggedFriendLikedPosts,
+      ...taggedPublicPosts,
+    ];
 
-    while (availableBoosted.length > 0 && result.length < limit) {
-      if (result.length >= boostIndex) {
-        const boostedPost = availableBoosted.shift();
-        if (boostedPost) {
-          result.splice(boostIndex, 0, {
-            ...boostedPost,
-            feed_type: "boosted",
-          });
-          boostIndex += 4; // Next boost position
-        }
-      } else {
-        break;
-      }
-    }
-
-    // Add friend-liked posts (every 5th position after friends posts)
-    // Filter out posts already in feed to avoid duplicates for friend-liked
-    const usedPostIds = result.map(post => post.id);
-    const availableFriendLiked = friendLikedPosts.filter(
-      post => !usedPostIds.includes(post.id)
+    // Remove duplicates (keep first occurrence)
+    const uniquePosts = allPosts.filter(
+      (post, index, self) => self.findIndex(p => p.id === post.id) === index
     );
 
-    let friendLikedIndex = 4; // Start at position 4
-    availableFriendLiked.forEach(post => {
-      if (result.length >= friendLikedIndex && result.length < limit) {
-        result.splice(friendLikedIndex, 0, {
-          ...post,
-          feed_type: "friend_liked",
-        });
-        friendLikedIndex += 5; // Next friend-liked post position
-      }
+    // Sort by created_at DESC (newest first)
+    const sortedPosts = uniquePosts.sort((a, b) => {
+      const dateA = new Date(a.created_at).getTime();
+      const dateB = new Date(b.created_at).getTime();
+      return dateB - dateA; // Descending order (newest first)
     });
 
-    // Fill remaining slots with public posts
-    // Remove boosted posts from public posts to avoid confusion
-    const boostedPostIds = boostedPosts.map(post => post.id);
-    const availablePublic = publicPosts.filter(
-      post => !boostedPostIds.includes(post.id)
-    );
-
-    availablePublic.forEach(post => {
-      if (result.length < limit) {
-        result.push({ ...post, feed_type: "public" });
-      }
-    });
-
-    // If still not enough, add remaining boosted posts
-    availableBoosted.forEach(post => {
-      if (result.length < limit) {
-        result.push({ ...post, feed_type: "boosted" });
-      }
-    });
-
-    return result.slice(0, limit);
+    // Apply pagination offset
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    
+    // Return paginated results
+    return sortedPosts.slice(startIndex, endIndex);
   };
 
   /**
@@ -797,6 +769,36 @@ export class PostService {
     "Failed to get public posts"
   );
 
+  /**
+   * Get user's own posts for their feed
+   * Shows user's recent posts in their own feed
+   */
+  private static getUserOwnPostsCached = asyncHandler(
+    async (userId: string, targetCount: number) => {
+      const { data, error } = await supabase
+        .from("posts")
+        .select(
+          `
+          *, 
+          post_media(*), 
+          users!inner(username, first_name, last_name, profile_picture)
+        `
+        )
+        .eq("user_id", userId)
+        .eq("is_deleted", false)
+        .order("created_at", { ascending: false })
+        .limit(targetCount);
+
+      if (error) {
+        logger.warn("Failed to fetch user's own posts:", error);
+        return [];
+      }
+
+      return data || [];
+    },
+    "Failed to get user's own posts"
+  );
+
   // ============= POST MIXING ALGORITHM =============
 
   /**
@@ -1048,6 +1050,7 @@ export class PostService {
       );
 
       console.log("Feed data lengths:", {
+        user: feedData.userPosts.length,
         friends: feedData.friendsPosts.length,
         boosted: feedData.boostedPosts.length,
         friendLiked: feedData.friendLikedPosts.length,
@@ -1056,10 +1059,12 @@ export class PostService {
 
       // 7. Generate mixed feed directly (simpler approach)
       const mixedFeed = this.simpleFeedMix({
+        userPosts: feedData.userPosts,
         friendsPosts: feedData.friendsPosts,
         boostedPosts: feedData.boostedPosts,
         friendLikedPosts: feedData.friendLikedPosts,
         publicPosts: feedData.publicPosts,
+        page,
         limit,
       });
 
@@ -1090,6 +1095,7 @@ export class PostService {
           hasMore: page * limit < totalCounts.estimatedTotal,
           totalPages: Math.ceil(totalCounts.estimatedTotal / limit),
           counts: {
+            user: feedData.userPosts.length,
             friends: feedData.friendsPosts.length,
             boosted: feedData.boostedPosts.length,
             friendLiked: feedData.friendLikedPosts.length,
