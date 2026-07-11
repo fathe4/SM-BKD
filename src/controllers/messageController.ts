@@ -6,6 +6,11 @@ import { AppError } from "../middlewares/errorHandler";
 import { UUID } from "crypto";
 import { supabase } from "../config/supabase";
 
+import { getIO } from "../socketio";
+import { getUserSocketIds } from "../socketio/handlers/connectionHandler";
+import { messageService } from "../services/messageService";
+import { ChatService } from "../services/chatService";
+
 export class MessageController {
   /**
    * Send a new message
@@ -34,6 +39,70 @@ export class MessageController {
         content,
         media,
       });
+
+      // Get sender profile details
+      const { data: senderUser } = await supabase
+        .from("users")
+        .select("id, username, first_name, last_name, profile_picture")
+        .eq("id", userId)
+        .single();
+
+      const sender = {
+        id: userId,
+        username: senderUser?.username || "user",
+        first_name: senderUser?.first_name || "",
+        last_name: senderUser?.last_name || "",
+        profile_picture: senderUser?.profile_picture || null,
+      };
+
+      // Notify other participants of the new message via Socket.IO
+      try {
+        const io = getIO();
+        if (io) {
+          const participants = await messageService.getChatParticipants(chatId);
+          const payload = { ...message, sender };
+
+          for (const participant of participants) {
+            const socketIds = getUserSocketIds(participant.id);
+            if (socketIds.length > 0) {
+              socketIds.forEach((sid) => {
+                if (participant.id === userId) {
+                  io.to(sid).emit("message:sent", { message: payload });
+                } else {
+                  io.to(sid).emit("message:new", { message: payload });
+                  io.to(sid).emit("chats:update", {
+                    chatId,
+                    lastMessage: {
+                      content: content || "[Media]",
+                      sender_id: userId,
+                      created_at: new Date(),
+                    },
+                  });
+                }
+              });
+
+              // Send the updated chat list to update badges
+              const { chats, total } = await ChatService.getUserChats(
+                participant.id,
+                1,
+                20,
+              );
+              socketIds.forEach((sid) => {
+                io.to(sid).emit("chats:latest", {
+                  chats,
+                  total,
+                  page: 1,
+                  totalPages: Math.ceil(total / 20),
+                  limit: 20,
+                  updatedChatId: chatId,
+                });
+              });
+            }
+          }
+        }
+      } catch (socketErr: any) {
+        console.error("Error broadcasting REST message via socket:", socketErr);
+      }
 
       res.status(201).json({
         status: "success",

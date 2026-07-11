@@ -1,5 +1,6 @@
 import { supabase, supabaseAdmin } from "../config/supabase";
 import { AppError } from "../middlewares/errorHandler";
+import { domainEvents } from "../events/domainEvents";
 import {
   Friendship,
   FriendshipStatus,
@@ -165,6 +166,17 @@ export class FriendshipService {
           });
         } catch (notificationError) {
           logger.error("Failed to create friend request accepted notification:", notificationError);
+        }
+
+        try {
+          // Publish event asynchronously
+          domainEvents.emit("FRIENDSHIP_ACCEPTED", {
+            requesterId: data.requester_id,
+            addresseeId: data.addressee_id,
+            friendshipId: data.id
+          });
+        } catch (eventError) {
+          logger.error("Failed to emit FRIENDSHIP_ACCEPTED event:", eventError);
         }
       }
 
@@ -421,6 +433,26 @@ export class FriendshipService {
       };
     },
     "Failed to get mutual friends",
+  );
+
+  /**
+   * Get the count of incoming pending friend requests for a user
+   */
+  static getPendingIncomingRequestCount = asyncHandler(
+    async (userId: string): Promise<number> => {
+      const { count, error } = await supabase
+        .from("friendships")
+        .select("id", { count: "exact", head: true })
+        .eq("status", FriendshipStatus.PENDING)
+        .eq("addressee_id", userId); // Only incoming requests
+
+      if (error) {
+        throw new AppError(error.message, 400);
+      }
+
+      return count || 0;
+    },
+    "Failed to get pending friend request count",
   );
 
   static getPendingFriendRequestIds = asyncHandler(

@@ -52,10 +52,54 @@ export class EnhancedMessageService {
       if (error) {
         throw new AppError(error.message, 400);
       }
+
+      // Hook to advance relationship stages asynchronously
+      EnhancedMessageService.hookAdvanceRelationship(data.chat_id, data.sender_id).catch(err => {
+        logger.error(`Error in BKD relationship advancement hook: ${err.message}`);
+      });
+
       return data as Message;
     },
     "Failed to create message"
   );
+
+  /**
+   * Hook to check chat participants and advance relationship stage if it is an AI <-> Human direct chat.
+   */
+  private static async hookAdvanceRelationship(chatId: string, senderId: string): Promise<void> {
+    try {
+      const participants = await this.getChatParticipants(chatId);
+      if (participants.length !== 2) return;
+
+      const userA = participants[0].id;
+      const userB = participants[1].id;
+
+      const { data: users } = await supabaseAdmin!
+        .from("users")
+        .select("id, is_ai")
+        .in("id", [userA, userB]);
+
+      if (!users || users.length !== 2) return;
+
+      const aiUser = users.find(u => u.is_ai);
+      const humanUser = users.find(u => !u.is_ai);
+
+      if (!aiUser || !humanUser) return;
+
+      const { data: persona } = await supabaseAdmin!
+        .from("persona_identities")
+        .select("id")
+        .eq("user_id", aiUser.id)
+        .maybeSingle();
+
+      if (!persona) return;
+
+      const { RelationshipService } = require("./simulation/relationship.service");
+      await RelationshipService.advance(humanUser.id, persona.id, 1);
+    } catch (err: any) {
+      logger.error(`Failed to advance relationship stage via hook: ${err.message}`);
+    }
+  }
 
   /**
    * Mark a message as read with privacy-aware read receipts

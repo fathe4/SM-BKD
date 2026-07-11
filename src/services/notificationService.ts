@@ -78,8 +78,64 @@ export class NotificationService {
         throw new AppError(error.message, 400);
       }
 
+      // Enrich notifications with post context (post_id + post_image) for comment/reaction types
+      const enriched = await Promise.all(
+        (data || []).map(async (notif: any) => {
+          try {
+            if (notif.reference_type === "comment") {
+              // Resolve comment → post_id
+              const { data: comment } = await supabase
+                .from("comments")
+                .select("post_id")
+                .eq("id", notif.reference_id)
+                .maybeSingle();
+
+              if (comment?.post_id) {
+                notif.post_id = comment.post_id;
+
+                // Get first image from post_media
+                const { data: media } = await supabase
+                  .from("post_media")
+                  .select("media_url")
+                  .eq("post_id", comment.post_id)
+                  .order("order", { ascending: true })
+                  .limit(1)
+                  .maybeSingle();
+
+                notif.post_image = media?.media_url ?? null;
+              }
+            } else if (notif.reference_type === "reaction") {
+              // Resolve reaction → target_id (post_id when target_type = post)
+              const { data: reaction } = await supabase
+                .from("reactions")
+                .select("target_id, target_type")
+                .eq("id", notif.reference_id)
+                .maybeSingle();
+
+              if (reaction?.target_type === "post" && reaction?.target_id) {
+                notif.post_id = reaction.target_id;
+
+                const { data: media } = await supabase
+                  .from("post_media")
+                  .select("media_url")
+                  .eq("post_id", reaction.target_id)
+                  .order("order", { ascending: true })
+                  .limit(1)
+                  .maybeSingle();
+
+                notif.post_image = media?.media_url ?? null;
+              }
+            }
+          } catch {
+            // Enrichment is best-effort; never block the response
+          }
+
+          return notif;
+        }),
+      );
+
       return {
-        notifications: data as unknown as Notification[],
+        notifications: enriched as unknown as Notification[],
         total: count || 0,
       };
     },

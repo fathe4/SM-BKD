@@ -34,10 +34,13 @@ export interface Comment {
   created_at: Date;
   updated_at: Date;
   is_deleted: boolean;
+  is_ai_generated?: boolean;
 }
 
 export interface CommentCreate
-  extends Omit<Comment, "id" | "created_at" | "updated_at" | "is_deleted"> {}
+  extends Omit<Comment, "id" | "created_at" | "updated_at" | "is_deleted"> {
+  is_ai_generated?: boolean;
+}
 
 export interface CommentUpdate
   extends Partial<
@@ -81,7 +84,9 @@ export type CommentMedia = {
 };
 
 export interface CommentCreate
-  extends Omit<Comment, "id" | "created_at" | "updated_at" | "is_deleted"> {}
+  extends Omit<Comment, "id" | "created_at" | "updated_at" | "is_deleted"> {
+  is_ai_generated?: boolean;
+}
 
 export interface CommentUpdate
   extends Partial<

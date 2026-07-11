@@ -38,6 +38,8 @@ export interface Post {
   location?: PostLocation;
   is_deleted: boolean;
   view_count: number;
+  is_ai_generated?: boolean;
+  source?: string;
 }
 
 export interface PostCreate
@@ -53,6 +55,8 @@ export interface PostCreate
   > {
   is_boosted?: boolean;
   boost_until?: Date;
+  is_ai_generated?: boolean;
+  source?: string;
 }
 
 export interface PostUpdate

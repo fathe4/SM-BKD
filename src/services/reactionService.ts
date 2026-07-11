@@ -81,8 +81,8 @@ export class ReactionService {
         targetOwnerId = comment?.user_id ?? "";
       }
 
-      // Create notification if it's not the user's own content
-      if (targetOwnerId !== reactionData.user_id) {
+      // Create notification if it's not the user's own content and owner is resolved
+      if (targetOwnerId && targetOwnerId !== reactionData.user_id) {
         try {
           // Get actor's full name
           const { data: actor } = await supabase
@@ -105,6 +105,28 @@ export class ReactionService {
         } catch (error) {
           logger.error("Failed to create reaction notification:", error);
           // Don't throw error, just log it
+        }
+      }
+
+      // Trigger AI interaction checks if post belongs to an AI and actor is human
+      if (reactionData.target_type === TargetType.POST && targetOwnerId && targetOwnerId !== reactionData.user_id) {
+        try {
+          const { data: userRoles } = await supabaseAdmin!
+            .from("users")
+            .select("id, is_ai")
+            .in("id", [targetOwnerId, reactionData.user_id]);
+
+          const postOwner = userRoles?.find((u: any) => u.id === targetOwnerId);
+          const actor = userRoles?.find((u: any) => u.id === reactionData.user_id);
+
+          if (postOwner?.is_ai && actor && !actor.is_ai) {
+            const { AiBehaviorService } = require("./simulation/aiBehavior.service");
+            AiBehaviorService.handleHumanInteraction(reactionData.user_id.toString(), targetOwnerId.toString()).catch((err: any) => {
+              logger.error(`Error in handleHumanInteraction on reaction: ${err.message}`);
+            });
+          }
+        } catch (err: any) {
+          logger.error(`Failed to handle human reaction interaction trigger: ${err.message}`);
         }
       }
 

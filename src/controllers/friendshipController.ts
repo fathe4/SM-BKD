@@ -305,4 +305,20 @@ export class FriendshipController {
       });
     },
   );
+
+  /**
+   * Get the count of incoming pending friend requests
+   * @route GET /api/v1/friendships/pending-count
+   */
+  static getPendingRequestCount = controllerHandler(
+    async (req: Request, res: Response) => {
+      const userId = req.user!.id;
+      const count = await FriendshipService.getPendingIncomingRequestCount(userId);
+
+      res.status(200).json({
+        status: "success",
+        data: { count },
+      });
+    },
+  );
 }

@@ -31,7 +31,11 @@ import transactionRoutes from "./routes/transactionRoutes";
 import statsRoutes from "./routes/statsRoutes";
 import { setupMessageRetentionJob } from "./jobs/messageRetentionJob";
 import { setupSubscriptionStatusJob } from "./jobs/subscriptionStatusJob";
+import { setupAiEngagementJob } from "./jobs/aiEngagementJob";
 import { redisService } from "./services/redis.service";
+import { BehaviorPlannerService } from "./services/simulation/behaviorPlanner.service";
+import { AiPresenceService } from "./services/simulation/aiPresenceService";
+import { AiConversationStateService } from "./services/simulation/aiConversationState.service";
 
 // Load environment variables
 config();
@@ -118,6 +122,15 @@ setupMessageRetentionJob();
 // Initialize the subscription status job when server starts
 setupSubscriptionStatusJob();
 
+// Initialize the AI Engagement job when server starts
+setupAiEngagementJob();
+
+// Initialize the AI Behavior Planner when server starts
+BehaviorPlannerService.init();
+
+// Initialize the AI Presence Service when server starts
+AiPresenceService.init();
+
 // API routes
 app.use(`${apiPrefix}/auth`, authRoutes);
 app.use(`${apiPrefix}/profiles`, profileRoutes);
@@ -138,6 +151,36 @@ app.use(`${apiPrefix}/stories`, storyRoutes);
 app.use(`${apiPrefix}/subscriptions`, subscriptionRoutes);
 app.use(`${apiPrefix}/transactions`, transactionRoutes);
 app.use(`${apiPrefix}/stats`, statsRoutes);
+
+// Test endpoint for chat availability (to run in the context of the active server process)
+app.post(`${apiPrefix}/test/chat-availability`, async (req: Request, res: Response) => {
+  try {
+    const { chatId, mode, reason } = req.body;
+    if (!chatId) {
+      return res.status(400).json({ error: "chatId is required" });
+    }
+
+    if (mode === "resume") {
+      logger.info(`[Test Endpoint] Resuming chat ${chatId}...`);
+      await AiConversationStateService.setAvailability(chatId, null, null, "AVAILABLE", "DAILY_LIMIT");
+    } else {
+      logger.info(`[Test Endpoint] Pausing chat ${chatId} with reason ${reason || "BUSY"}...`);
+      await AiConversationStateService.setAvailability(
+        chatId,
+        null,
+        null,
+        "PAUSED",
+        reason || "BUSY",
+        new Date(Date.now() + 60 * 60 * 1000) // Pause for 1 hour
+      );
+    }
+
+    return res.status(200).json({ status: "success" });
+  } catch (err: any) {
+    logger.error(`[Test Endpoint] Error: ${err.message}`);
+    return res.status(500).json({ error: err.message });
+  }
+});
 
 // 404 handler
 app.use((req: Request, res: Response) => {

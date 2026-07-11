@@ -16,6 +16,13 @@ export class AppError extends Error {
   }
 }
 
+export class ExpectedError extends AppError {
+  isExpected = true;
+  constructor(message: string, statusCode: number = 400) {
+    super(message, statusCode);
+  }
+}
+
 // export const errorHandler = (
 //   err: Error | AppError,
 //   req: Request,

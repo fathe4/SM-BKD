@@ -67,4 +67,9 @@ export interface ChatSummary {
     username: string;
     profile_picture?: string | null;
   }[];
+  availability?: {
+    state: "AVAILABLE" | "PAUSED" | "FINISHED";
+    until: string | null;
+    reason: "SLEEP" | "BUSY" | "SOCIAL_FATIGUE" | "WORK" | "NO_RESPONSE" | "DAILY_LIMIT" | null;
+  };
 }
