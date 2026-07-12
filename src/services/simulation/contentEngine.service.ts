@@ -248,9 +248,25 @@ export class ContentEngineService {
             continue;
           }
 
+          // Check if candidate image URL has already been published globally in the database
+          if (cand.imageurl) {
+            const { data: existingMedia } = await supabaseAdmin!
+              .from("post_media")
+              .select("id")
+              .eq("media_url", cand.imageurl)
+              .limit(1)
+              .maybeSingle();
+
+            if (existingMedia) {
+              logger.info(`Candidate image "${cand.imageurl.slice(0, 50)}..." was already published globally. Skipping.`);
+              continue;
+            }
+          }
+
           // Check if another concurrent worker is already processing this candidate ID or a very similar story topic
           let isLockedByUs = false;
           let storyLockKey = "";
+          let mediaLockKey = "";
           if (redisService.isReady()) {
             try {
               const candLockKey = `lock:candidate:${cand.id}`;
@@ -269,6 +285,12 @@ export class ContentEngineService {
                 storyLockKey = `lock:story_topic:${sortedTopic}`;
               }
 
+              if (cand.imageurl) {
+                const crypto = require("crypto");
+                const urlHash = crypto.createHash("md5").update(cand.imageurl).digest("hex");
+                mediaLockKey = `lock:media:${urlHash}`;
+              }
+
               const client = redisService.getClient();
               
               // 1. Check/Set candidate lock
@@ -284,6 +306,19 @@ export class ContentEngineService {
                 if (storyLockResult !== "OK") {
                   await (client as any).del(candLockKey); // Release candidate lock
                   logger.info(`Story topic lock active for "${cand.title.slice(0, 50)}..." (Topic key: ${storyLockKey}). Skipping duplicate story...`);
+                  continue;
+                }
+              }
+
+              // 3. Check/Set media lock (prevents concurrent duplicate images)
+              if (mediaLockKey) {
+                const mediaLockResult = await (client as any).set(mediaLockKey, "1", "NX", "EX", 45); // 45 seconds lock
+                if (mediaLockResult !== "OK") {
+                  await (client as any).del(candLockKey); // Release candidate lock
+                  if (storyLockKey) {
+                    await (client as any).del(storyLockKey); // Release story lock
+                  }
+                  logger.info(`Media lock active for image "${cand.imageurl.slice(0, 50)}...". Skipping duplicate image...`);
                   continue;
                 }
               }
@@ -349,6 +384,9 @@ export class ContentEngineService {
                   if (storyLockKey) {
                     await (client as any).del(storyLockKey);
                   }
+                  if (mediaLockKey) {
+                    await (client as any).del(mediaLockKey);
+                  }
                 } catch {}
               }
               continue;
@@ -404,6 +442,9 @@ export class ContentEngineService {
                   if (storyLockKey) {
                     await (client as any).del(storyLockKey);
                   }
+                  if (mediaLockKey) {
+                    await (client as any).del(mediaLockKey);
+                  }
                 } catch {}
               }
 
@@ -422,6 +463,9 @@ export class ContentEngineService {
                 await (client as any).del(`lock:candidate:${cand.id}`);
                 if (storyLockKey) {
                   await (client as any).del(storyLockKey);
+                }
+                if (mediaLockKey) {
+                  await (client as any).del(mediaLockKey);
                 }
               } catch (err: any) {
                 logger.warn(`Failed to release Redis lock for candidate "${cand.title.slice(0, 50)}...": ${err.message}`);

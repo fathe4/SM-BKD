@@ -157,6 +157,17 @@ export class ChatService {
         await supabaseAdmin!.from("chats").delete().eq("id", chat.id);
         throw new AppError(participantsError.message, 400);
       }
+
+      // Invalidate user chat list caches on chat creation
+      try {
+        const { redisService } = require("./redis.service");
+        for (const p of participantsWithChatId) {
+          await redisService.invalidateUserCaches(p.user_id);
+        }
+      } catch (cacheErr: any) {
+        console.error(`Error invalidating user caches on chat create:`, cacheErr);
+      }
+
       console.log(chat, "chat");
 
       return { chat: chat as Chat, isDuplicate: false };

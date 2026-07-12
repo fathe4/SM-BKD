@@ -9,7 +9,6 @@ import { supabase } from "../config/supabase";
 import { getIO } from "../socketio";
 import { getUserSocketIds } from "../socketio/handlers/connectionHandler";
 import { messageService } from "../services/messageService";
-import { ChatService } from "../services/chatService";
 
 export class MessageController {
   /**
@@ -55,49 +54,33 @@ export class MessageController {
         profile_picture: senderUser?.profile_picture || null,
       };
 
-      // Notify other participants of the new message via Socket.IO
+      // Notify other participants via Socket.IO
       try {
         const io = getIO();
         if (io) {
           const participants = await messageService.getChatParticipants(chatId);
           const payload = { ...message, sender };
 
+          const lastMessagePatch = {
+            chatId,
+            lastMessage: {
+              content: content || "[Media]",
+              sender_id: userId,
+              created_at: new Date().toISOString(),
+            },
+          };
+
           for (const participant of participants) {
             const socketIds = getUserSocketIds(participant.id);
-            if (socketIds.length > 0) {
-              socketIds.forEach((sid) => {
-                if (participant.id === userId) {
-                  io.to(sid).emit("message:sent", { message: payload });
-                } else {
-                  io.to(sid).emit("message:new", { message: payload });
-                  io.to(sid).emit("chats:update", {
-                    chatId,
-                    lastMessage: {
-                      content: content || "[Media]",
-                      sender_id: userId,
-                      created_at: new Date(),
-                    },
-                  });
-                }
-              });
-
-              // Send the updated chat list to update badges
-              const { chats, total } = await ChatService.getUserChats(
-                participant.id,
-                1,
-                20,
-              );
-              socketIds.forEach((sid) => {
-                io.to(sid).emit("chats:latest", {
-                  chats,
-                  total,
-                  page: 1,
-                  totalPages: Math.ceil(total / 20),
-                  limit: 20,
-                  updatedChatId: chatId,
-                });
-              });
-            }
+            socketIds.forEach((sid) => {
+              if (participant.id === userId) {
+                io.to(sid).emit("message:sent", { message: payload });
+              } else {
+                io.to(sid).emit("message:new", { message: payload });
+              }
+              // All participants get the lightweight sidebar update
+              io.to(sid).emit("chats:update", lastMessagePatch);
+            });
           }
         }
       } catch (socketErr: any) {

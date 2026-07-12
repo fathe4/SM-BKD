@@ -10,6 +10,7 @@ import { getIO } from "..";
 import { UUID } from "crypto";
 import { ChatService } from "../../services/chatService";
 import { enhancedMessageService } from "../../services/enhancedMessageService";
+import { redisService } from "../../services/redis.service";
 
 // Types for message events
 interface SendMessageData {
@@ -71,77 +72,28 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
       // Emit to the chat room (to everyone except sender)
       socket.to(chatId).emit("message:new", { message: newMsg });
 
-      // Get participants to check who's offline for push notifications
+      // Notify all participants (except sender) with a lightweight chat update
       const participants = await messageService.getChatParticipants(chatId);
 
-      // Notify all participants to update their chat lists
+      const lastMessagePatch = {
+        chatId,
+        lastMessage: {
+          content: content || "[Media]",
+          sender_id: userId,
+          created_at: new Date().toISOString(),
+        },
+      };
+
       participants.forEach(participant => {
-        if (participant.id !== userId) {
-          // Don't notify the sender
-          // Get socket IDs for this participant
-          const participantSocketIds = getUserSocketIds(participant.id);
-
-          // Emit chat update event to all their connected devices
-          participantSocketIds.forEach(socketId => {
-            io.to(socketId).emit("chats:update", {
-              chatId,
-              lastMessage: {
-                content: content || "[Media]",
-                sender_id: userId,
-                created_at: new Date(),
-              },
-            });
-          });
-        }
-      });
-
-      // Notify all participants with detailed chat list update
-      for (const participant of participants) {
-        // Get socket IDs for this participant
         const participantSocketIds = getUserSocketIds(participant.id);
-
-        if (participantSocketIds.length > 0) {
-          try {
-            // Fetch latest chats for this participant
-            const { chats, total } = await ChatService.getUserChats(
-              participant.id,
-              1,
-              20
-            );
-
-            // Emit detailed chats to all their connected devices
-            participantSocketIds.forEach(socketId => {
-              io.to(socketId).emit("chats:latest", {
-                chats,
-                total,
-                page: 1,
-                totalPages: Math.ceil(total / 20),
-                limit: 20,
-                updatedChatId: chatId, // Include which chat was updated
-              });
-            });
-          } catch (error) {
-            logger.error(
-              `Error fetching chats for user ${participant.id}:`,
-              error
-            );
-          }
-        }
-      }
-
-      // Send push notification to offline users
-      participants.forEach(participant => {
-        if (participant.id !== userId) {
-          // Don't notify the sender
-          const userStatus = getUserStatus(participant.id);
-
-          if (userStatus.status !== "online") {
-            // In a real implementation, queue a push notification here
-            logger.debug(
-              `Queuing push notification for offline user ${participant.id}`
-            );
-          }
-        }
+        participantSocketIds.forEach(socketId => {
+          // If the participant is not the sender, increment their unread count by 1 in the sidebar
+          const patch = {
+            ...lastMessagePatch,
+            ...(participant.id !== userId ? { incrementUnread: true } : {})
+          };
+          io.to(socketId).emit("chats:update", patch);
+        });
       });
     } catch (error) {
       logger.error("Error sending message:", error);
@@ -152,15 +104,48 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
   });
 
   // Handle message read receipts
-  socket.on("message:read", async (data: ReadReceiptData) => {
+  socket.on("message:read", async (data: any) => {
     try {
-      const { chatId, messageId } = data;
+      const { chatId, messageId, messageIds } = data;
+      const idsToMark = messageIds && Array.isArray(messageIds)
+        ? messageIds
+        : (messageId ? [messageId] : []);
+
+      if (idsToMark.length === 0) return;
 
       // Update message read status in database
-      await messageService.markMessageAsRead(messageId, userId);
+      for (const id of idsToMark) {
+        await messageService.markMessageAsRead(id, userId);
+      }
 
-      // Get the original message to send with the read receipt
-      const message = await messageService.getMessageById(messageId);
+      // Invalidate Redis chat list and summary caches for all participants
+      try {
+        const participants = await enhancedMessageService.getChatParticipants(chatId);
+        const keysToDelete = [
+          `chat:summary:${chatId}`,
+          `messages:recent:${chatId}`
+        ];
+        await redisService.delete(...keysToDelete);
+        for (const p of participants) {
+          await redisService.invalidateUserCaches(p.id);
+        }
+        logger.debug(`Invalidated Redis caches after message:read in chat ${chatId}`);
+      } catch (cacheErr: any) {
+        logger.error(`Error invalidating Redis cache on message read: ${cacheErr.message}`);
+      }
+
+      // Notify all the reader's connected devices to set unread count to 0 for this chat
+      const readerSocketIds = getUserSocketIds(userId);
+      readerSocketIds.forEach(socketId => {
+        io.to(socketId).emit("chats:update", {
+          chatId,
+          unreadCount: 0,
+        });
+      });
+
+      // Get the last read message to send with the read receipt
+      const activeMessageId = idsToMark[idsToMark.length - 1];
+      const message = await messageService.getMessageById(activeMessageId);
 
       if (!message) {
         return; // Message might have been deleted
@@ -183,7 +168,7 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
           senderSocketIds.forEach(socketId => {
             socketServer.to(socketId).emit("message:read", {
               chatId,
-              messageId,
+              messageId: activeMessageId,
               readBy: userId,
               readAt: new Date(),
             });
@@ -195,7 +180,7 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
       socket.to(chatId).emit("chat:activity", {
         chatId,
         userId,
-        lastRead: messageId,
+        lastRead: activeMessageId,
         timestamp: new Date(),
       });
     } catch (error) {

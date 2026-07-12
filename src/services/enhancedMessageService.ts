@@ -53,6 +53,22 @@ export class EnhancedMessageService {
         throw new AppError(error.message, 400);
       }
 
+      // Invalidate chat caches on new message
+      try {
+        const participants = await EnhancedMessageService.getChatParticipants(data.chat_id);
+        const keysToDelete = [
+          `chat:summary:${data.chat_id}`,
+          `messages:recent:${data.chat_id}`
+        ];
+        await redisService.delete(...keysToDelete);
+        for (const p of participants) {
+          await redisService.invalidateUserCaches(p.id);
+        }
+        logger.debug(`Invalidated Redis chat caches for chat ${data.chat_id}`);
+      } catch (cacheErr: any) {
+        logger.error(`Error invalidating Redis chat cache: ${cacheErr.message}`);
+      }
+
       // Hook to advance relationship stages asynchronously
       EnhancedMessageService.hookAdvanceRelationship(data.chat_id, data.sender_id).catch(err => {
         logger.error(`Error in BKD relationship advancement hook: ${err.message}`);
@@ -262,12 +278,7 @@ export class EnhancedMessageService {
         msg => !msg.is_read && msg.sender_id !== userId
       );
 
-      const modifiedData = data.map(message => ({
-        ...message,
-        is_read: false,
-      }));
-
-      console.log(data, "modifiedData");
+      console.log(data, "messages");
 
       // Process read statuses in the background (non-blocking)
       if (unreadMessages.length > 0) {
@@ -277,7 +288,7 @@ export class EnhancedMessageService {
       }
 
       return {
-        messages: modifiedData as Message[],
+        messages: data as Message[],
         total: count || 0,
       };
     },
