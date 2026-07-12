@@ -1,5 +1,6 @@
 import { Server as SocketIOServer, Socket } from "socket.io";
 import { logger } from "../../utils/logger";
+import { AiPresenceService } from "../../services/simulation/aiPresenceService";
 
 // Store for active connections and user statuses
 const activeConnections = new Map<string, Set<string>>();
@@ -37,6 +38,18 @@ export function connectionHandler(io: SocketIOServer, socket: Socket): void {
 
   // Handle status requests
   socket.on("user:getStatus", (data: { targetUserId: string }) => {
+    if (AiPresenceService.isAiUser(data.targetUserId)) {
+      const aiStatus = AiPresenceService.getAiStatus(data.targetUserId);
+      socket.emit("user:statusInfo", {
+        userId: data.targetUserId,
+        status: aiStatus.status,
+        lastActive: aiStatus.lastActive.toISOString(),
+        presenceState: aiStatus.presenceState,
+        currentActivity: aiStatus.currentActivity
+      });
+      return;
+    }
+
     const status = userStatuses.get(data.targetUserId) || {
       status: "offline",
       lastActive: new Date(),

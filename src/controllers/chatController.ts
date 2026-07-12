@@ -261,4 +261,20 @@ export class ChatController {
       });
     },
   );
+
+  /**
+   * Get total unread message count across all chats
+   * @route GET /api/v1/chats/unread-count
+   */
+  static getUnreadCount = controllerHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id as UUID;
+    const count = await ChatService.getUnreadMessageCount(userId);
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        count,
+      },
+    });
+  });
 }

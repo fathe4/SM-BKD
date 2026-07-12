@@ -17,6 +17,9 @@ import { PrivacySettingsService } from "./privacySettingsService";
 import { ChatParticipantDetails } from "../types/models";
 import { MemberRole } from "../models";
 import { redisService } from "./redis.service";
+import { AiConversationStateService } from "./simulation/aiConversationState.service";
+import { getIO } from "../socketio";
+import { getUserSocketIds } from "../socketio/handlers/connectionHandler";
 
 export class ChatService {
   static findChatByContext = async (
@@ -154,6 +157,17 @@ export class ChatService {
         await supabaseAdmin!.from("chats").delete().eq("id", chat.id);
         throw new AppError(participantsError.message, 400);
       }
+
+      // Invalidate user chat list caches on chat creation
+      try {
+        const { redisService } = require("./redis.service");
+        for (const p of participantsWithChatId) {
+          await redisService.invalidateUserCaches(p.user_id);
+        }
+      } catch (cacheErr: any) {
+        console.error(`Error invalidating user caches on chat create:`, cacheErr);
+      }
+
       console.log(chat, "chat");
 
       return { chat: chat as Chat, isDuplicate: false };
@@ -412,6 +426,9 @@ export class ChatService {
         throw new AppError(unreadError.message, 400);
       }
 
+      // Get availability from AiConversationStateService
+      const availability = await AiConversationStateService.getAvailability(chatId);
+
       // Format the chat summary
       return {
         ...chat,
@@ -428,6 +445,7 @@ export class ChatService {
           : undefined,
         unread_count: unreadCount || 0,
         participants,
+        availability,
       };
     },
     "Failed to get chat summary"
@@ -612,6 +630,14 @@ export class ChatService {
         }
       }
 
+      // Fetch participants before deleting them so we can clear their caches and notify them
+      const { data: participants, error: participantsFetchError } = await supabaseAdmin!
+        .from("chat_participants")
+        .select("user_id")
+        .eq("chat_id", chatId);
+
+      const participantIds = (participants || []).map((p: any) => p.user_id);
+
       // Delete all messages in the chat
       const { error: messagesError } = await supabaseAdmin!
         .from("messages")
@@ -640,6 +666,39 @@ export class ChatService {
 
       if (error) {
         throw new AppError(error.message, 400);
+      }
+
+      // Invalidate Redis caches for the chat
+      try {
+        await redisService.delete(`chat:${chatId}`);
+        await redisService.delete(`chat:summary:${chatId}`);
+        await redisService.delete(`messages:recent:${chatId}`);
+        await redisService.delete(`chat:participants:${chatId}`);
+
+        // Invalidate cache for all participants
+        for (const pid of participantIds) {
+          await redisService.delete(`chat:list:${pid}`);
+          await redisService.delete(`chat:total:${pid}`);
+        }
+      } catch (cacheErr: any) {
+        console.error("Failed to clear Redis cache on chat delete:", cacheErr.message);
+      }
+
+      // Broadcast chat:deleted to all participants via Socket.IO
+      try {
+        const io = getIO();
+        if (io) {
+          for (const pid of participantIds) {
+            const socketIds = getUserSocketIds(pid);
+            if (socketIds && socketIds.length > 0) {
+              socketIds.forEach((sid) => {
+                io.to(sid).emit("chat:deleted", { chatId });
+              });
+            }
+          }
+        }
+      } catch (socketErr: any) {
+        console.error("Failed to broadcast chat:deleted event:", socketErr.message);
       }
     },
     "Failed to delete chat"
@@ -894,6 +953,39 @@ export class ChatService {
     }
     return null;
   }
+
+  static getUnreadMessageCount = asyncHandler(
+    async (userId: string): Promise<number> => {
+      const { data: participations, error: partError } = await supabaseAdmin!
+        .from("chat_participants")
+        .select("chat_id")
+        .eq("user_id", userId);
+
+      if (partError) {
+        throw new AppError(partError.message, 400);
+      }
+
+      if (!participations || participations.length === 0) {
+        return 0;
+      }
+
+      const chatIds = participations.map(p => p.chat_id);
+
+      const { count, error: countError } = await supabaseAdmin!
+        .from("messages")
+        .select("id", { count: "exact", head: true })
+        .in("chat_id", chatIds)
+        .eq("is_read", false)
+        .neq("sender_id", userId);
+
+      if (countError) {
+        throw new AppError(countError.message, 400);
+      }
+
+      return count || 0;
+    },
+    "Failed to get unread message count"
+  );
 }
 
 /**

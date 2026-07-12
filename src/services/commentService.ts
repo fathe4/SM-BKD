@@ -13,6 +13,7 @@ import { StorageService } from "./storageService";
 import { NotificationService } from "./notificationService";
 import { ReferenceType } from "../models/notification.model";
 import { logger } from "../utils/logger";
+import { decodeHtmlEntities } from "../utils/textUtils";
 
 /**
  * Service class for comment-related operations
@@ -110,6 +111,7 @@ export class CommentService {
         .from("comments")
         .insert({
           ...commentData,
+          content: decodeHtmlEntities(commentData.content),
           media,
           is_deleted: false,
         })
@@ -132,6 +134,26 @@ export class CommentService {
           });
         } catch (error) {
           logger.error("Failed to create comment notification:", error);
+        }
+
+        // Trigger AI interaction checks if post belongs to an AI and commenter is human
+        try {
+          const { data: userRoles } = await supabaseAdmin!
+            .from("users")
+            .select("id, is_ai")
+            .in("id", [post.user_id, commentData.user_id]);
+
+          const postOwner = userRoles?.find((u: any) => u.id === post.user_id);
+          const commenter = userRoles?.find((u: any) => u.id === commentData.user_id);
+
+          if (postOwner?.is_ai && commenter && !commenter.is_ai) {
+            const { AiBehaviorService } = require("./simulation/aiBehavior.service");
+            AiBehaviorService.handleHumanInteraction(commentData.user_id.toString(), post.user_id.toString()).catch((err: any) => {
+              logger.error(`Error in handleHumanInteraction on comment: ${err.message}`);
+            });
+          }
+        } catch (err: any) {
+          logger.error(`Failed to handle human comment interaction trigger: ${err.message}`);
         }
       }
 

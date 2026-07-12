@@ -17,6 +17,10 @@ export const asyncHandler = <T, Args extends any[]>(
     try {
       return await fn(...args);
     } catch (error) {
+      if (error && (error as any).isExpected) {
+        throw error;
+      }
+
       logger.error(`${errorMessage}:`, error);
 
       if (error instanceof AppError) {

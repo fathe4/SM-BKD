@@ -46,6 +46,9 @@ export class PostController {
       await PostService.addPostMedia(postMediaItems);
     }
 
+    // Invalidate caches AFTER media has been added
+    await PostService.invalidateRelevantFeeds(post.user_id, post.location);
+
     // Get the complete post with media
     const completePost = await PostService.getPostById(post.id, userId);
 

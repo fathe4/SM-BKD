@@ -29,6 +29,13 @@ router.post("/", validateCreateChat, ChatController.createChat);
 router.get("/", ChatController.getMyChats);
 
 /**
+ * @route GET /api/v1/chats/unread-count
+ * @desc Get total unread message count
+ * @access Private
+ */
+router.get("/unread-count", ChatController.getUnreadCount);
+
+/**
  * @route GET /api/v1/chats/:chatId
  * @desc Get a specific chat
  * @access Private (chat participants only)

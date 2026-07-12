@@ -45,7 +45,7 @@ class RedisService {
     USER_PARTICIPANTS: 300, // 5 minutes
 
     // Feed system TTLs
-    USER_FEED: 300, // 5 minutes (main feed cache)
+    USER_FEED: 5, // 5 seconds (main feed cache)
     USER_LOCATION: 3600, // 1 hour (location doesn't change often)
     USER_FRIENDS: 1800, // 30 minutes (friends list)
     LOCATION_POSTS: 600, // 10 minutes (location posts change less frequently)
@@ -141,7 +141,7 @@ class RedisService {
       USER_PARTICIPANTS: 300, // 5 minutes
 
       // Feed system TTLs
-      USER_FEED: 300, // 5 minutes (main feed cache)
+      USER_FEED: 5, // 5 seconds (main feed cache)
       USER_LOCATION: 3600, // 1 hour (location doesn't change often)
       USER_FRIENDS: 1800, // 30 minutes (friends list)
       LOCATION_POSTS: 600, // 10 minutes (location posts change less frequently)
@@ -291,6 +291,24 @@ class RedisService {
       console.error(`Redis DELETE pattern error for ${pattern}:`, error);
       return 0;
     }
+  }
+
+  /** Return all keys matching a pattern */
+  async scanKeys(pattern: string): Promise<string[]> {
+    if (!this.isReady()) return [];
+    try {
+      return await this.client!.keys(pattern);
+    } catch {
+      return [];
+    }
+  }
+
+  /** Delete a single key */
+  async deleteKey(key: string): Promise<void> {
+    if (!this.isReady()) return;
+    try {
+      await this.client!.del(key);
+    } catch { /* ignore */ }
   }
 
   // ============= FEED-SPECIFIC CACHE OPERATIONS =============

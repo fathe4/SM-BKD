@@ -40,6 +40,13 @@ router.get(
 router.get("/suggestions", FriendshipController.getFriendSuggestions);
 
 /**
+ * @route GET /api/v1/friendships/pending-count
+ * @desc Get the count of incoming pending friend requests
+ * @access Private
+ */
+router.get("/pending-count", FriendshipController.getPendingRequestCount);
+
+/**
  * @route GET /api/v1/friendships/mutual/:userId
  * @desc Get mutual friends with another user
  * @access Private
