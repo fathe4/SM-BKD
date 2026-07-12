@@ -868,7 +868,8 @@ export class ScraperService {
         }
       });
 
-      const approvedIndices = await LlmRendererService.moderatePosts(postsToModerate);
+      // Direct raw content mode: approve all scraped candidates without calling LLM moderation
+      const approvedIndices = postsToModerate.map((_, idx) => idx);
       const approvedSet = new Set(approvedIndices);
 
       for (let j = 0; j < chunk.length; j++) {
@@ -891,17 +892,8 @@ export class ScraperService {
           continue;
         }
 
-        // Approved! Pre-generate variations
-        logger.info(`Pre-generating variations for approved candidate: "${raw.title}"`);
-        const variations = await LlmRendererService.generateVariations({
-          title: raw.title,
-          body: raw.body || "",
-          source: candidateDb.source === "reddit" ? `Reddit r/${candidateDb.source_username}` : `Twitter @${candidateDb.source_username}`
-        });
-
-        if (!variations) {
-          logger.warn(`Failed to generate variations for "${raw.title}". Ingesting without pre-generated variations.`);
-        }
+        // Direct raw content mode: bypass pre-generating variations using LLM
+        const variations = null;
 
         // Ingest into feed_candidates
         try {
@@ -909,7 +901,7 @@ export class ScraperService {
           const { data: titleDup } = await supabaseAdmin!
             .from("feed_candidates")
             .select("id")
-            .eq("title", raw.title)
+            .eq("title", raw.body || raw.title)
             .limit(1)
             .maybeSingle();
 
@@ -943,7 +935,7 @@ export class ScraperService {
             .insert({
               candidate_type: candidateDb.category === "funny" ? "trending_discussion" : "news",
               origin: "NEWS",
-              title: raw.title,
+              title: raw.body || raw.title,
               summary: raw.body || raw.title,
               source: candidateDb.source === "reddit" ? `Reddit r/${candidateDb.source_username}` : `Twitter @${candidateDb.source_username}`,
               imageurl: candidateDb.image_url,

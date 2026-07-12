@@ -42,7 +42,7 @@ export class SimulationEngine {
       logger.info("Running Ingestion & Content Discovery phase...");
       let discoveryCount = 0;
 
-      if (currentTick === 0 || currentTick % 720 === 0) {
+      if (currentTick === 0 || currentTick % 180 === 0) {
         logger.info("RSS & DEV.to Discovery Pipeline is disabled. Skipping.");
         try {
           const { ScraperService } = require("./scraper.service");
@@ -52,7 +52,7 @@ export class SimulationEngine {
           logger.error(`Playwright scraper error in cycle: ${scrapErr.message}`);
         }
       } else {
-        logger.info(`Skipping discovery pipeline for tick ${currentTick} (runs every 720 ticks).`);
+        logger.info(`Skipping discovery pipeline for tick ${currentTick} (runs every 180 ticks).`);
       }
 
       const postCount = await IngestionService.ingestUserPosts();
