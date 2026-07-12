@@ -31,6 +31,8 @@ export interface TwitterScrapedPost {
 }
 
 export class ScraperService {
+  private static isScraping: boolean = false;
+
   /**
    * Scrape posts from a subreddit using Playwright Chromium
    */
@@ -725,8 +727,14 @@ export class ScraperService {
     subreddits: string[] = REDDIT_SUBREDDITS,
     twitterProfiles: string[] = ["Can_TheOnee", "linadreaamy", "YashRMFC", "elonmusk", "levelsio", "dril", "iamdevloper", "trolled_dev", "shitpost_bot", "software_jokes"]
   ): Promise<number> {
-    logger.info("Starting Playwright Scraper Pipeline...");
-    let totalIngested = 0;
+    if (this.isScraping) {
+      logger.info("Scraper pipeline is already running. Skipping concurrent execution.");
+      return 0;
+    }
+    this.isScraping = true;
+    try {
+      logger.info("Starting Playwright Scraper Pipeline...");
+      let totalIngested = 0;
 
     // 1. Reddit scraping — DISABLED (Twitter only mode)
     logger.info("Reddit scraping is disabled. Skipping Reddit loop.");
@@ -1000,6 +1008,9 @@ export class ScraperService {
 
     logger.info(`Playwright Scraper Pipeline complete. Ingested & pre-generated ${totalIngested} safe candidates.`);
     return totalIngested;
+    } finally {
+      this.isScraping = false;
+    }
   }
 }
 

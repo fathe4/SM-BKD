@@ -4,6 +4,7 @@ import { POSTING_PROFILES } from "../../config/postingProfiles";
 import { LlmRendererService } from "./llmRenderer.service";
 import { PostService } from "../postService";
 import { PostVisibility } from "../../models/post.model";
+import { ScraperService } from "./scraper.service";
 import { UUID } from "crypto";
 import { redisService } from "../redis.service";
 
@@ -203,6 +204,7 @@ export class ContentEngineService {
                 .from("feed_candidates")
                 .select("*")
                 .in("candidate_type", ["news", "trending_discussion"])
+                .eq("is_used", false)
                 .not("imageurl", "is", null) // Prioritize candidates with image attachments
                 .order("importance", { ascending: false })
                 .limit(1000);
@@ -236,9 +238,17 @@ export class ContentEngineService {
                     .from("feed_candidates")
                     .select("*")
                     .in("candidate_type", ["news", "trending_discussion"])
+                    .eq("is_used", false)
                     .order("importance", { ascending: false })
                     .limit(1000);
                 allUnused = getUnusedCandidates(fallback || []);
+            }
+
+            if (allUnused.length === 0) {
+                logger.warn("Zero unused candidates remaining in feed_candidates pool! Triggering background scraper...");
+                ScraperService.runScraperPipeline().catch(err => {
+                    logger.error(`Error running background scraper on empty pool: ${err.message}`);
+                });
             }
 
             const topicMatched = allUnused.filter(cand => {
@@ -425,6 +435,12 @@ export class ContentEngineService {
                                 throw new Error("Failed to create post in database (null response)");
                             }
 
+                            // Mark candidate as used in database
+                            await supabaseAdmin!
+                                .from("feed_candidates")
+                                .update({ is_used: true })
+                                .eq("id", cand.id);
+
                             // 5. Add image media to post if RSS image exists
                             if (newsImageUrl) {
                                 await PostService.addPostMedia([{
@@ -446,6 +462,11 @@ export class ContentEngineService {
                         } catch (postErr: any) {
                             if (postErr.message && (postErr.message.includes("unique") || postErr.message.includes("duplicate"))) {
                                 logger.warn(`Candidate "${cand.title.slice(0, 50)}..." was already published by another persona (unique constraint). Skipping...`);
+                                // Also mark it as used so we don't try it again
+                                await supabaseAdmin!
+                                    .from("feed_candidates")
+                                    .update({ is_used: true })
+                                    .eq("id", cand.id);
                             } else {
                                 logger.error(`Error publishing post for @${persona.username}: ${postErr.message}`);
                             }
