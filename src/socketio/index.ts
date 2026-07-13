@@ -21,11 +21,20 @@ export function initializeSocketIO(httpServer: HttpServer): SocketIOServer {
     return io; // Return existing instance if already initialized
   }
 
+  const allowedOrigins = [
+    process.env.CLIENT_URL,
+    process.env.FRONTEND_URL,
+    "http://localhost:3000",
+    "http://localhost:4200",
+    "https://dambala.ca",
+    "https://admin.dambala.ca"
+  ].filter(Boolean) as string[];
+
   // Create Socket.IO server with security settings
   io = new SocketIOServer(httpServer, {
     path: "/socket.io",
     cors: {
-      origin: process.env.CLIENT_URL || "*",
+      origin: allowedOrigins.length > 0 ? allowedOrigins : "*",
       methods: ["GET", "POST"],
       credentials: true,
     },

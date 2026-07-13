@@ -67,6 +67,28 @@ export class ReactionService {
         throw new AppError(error.message, 400);
       }
 
+      // Increment target post's view count (since reacting implies viewing)
+      if (reactionData.target_type === TargetType.POST) {
+        try {
+          const { data: post } = await supabaseAdmin!
+            .from("posts")
+            .select("view_count")
+            .eq("id", reactionData.target_id)
+            .single();
+          if (post) {
+            const currentViews = post.view_count || 0;
+            const newViews = Math.max(currentViews, 1) + 1;
+            await supabaseAdmin!
+              .from("posts")
+              .update({ view_count: newViews })
+              .eq("id", reactionData.target_id);
+            logger.info(`👁️ Incremented views on post ${reactionData.target_id} to ${newViews} via reaction creation.`);
+          }
+        } catch (err: any) {
+          logger.warn(`Failed to increment post view count on reaction: ${err.message}`);
+        }
+      }
+
       // Get the target (post or comment) to notify its owner
       let targetOwnerId: string;
       if (reactionData.target_type === TargetType.POST) {

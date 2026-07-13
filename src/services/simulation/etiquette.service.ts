@@ -272,12 +272,14 @@ export class EtiquetteService {
           .eq("id", candidate.reference_id)
           .single();
         if (post) {
-          const newViews = (post.view_count || 0) + 1;
+          // Increment by 1 for the persona, plus a random range of guest/anonymous views (e.g., 2 to 5)
+          const guestViews = Math.floor(Math.random() * 4) + 2;
+          const newViews = (post.view_count || 0) + guestViews;
           await supabaseAdmin!
             .from("posts")
             .update({ view_count: newViews })
             .eq("id", candidate.reference_id);
-          logger.info(`📈 Incremented view count to ${newViews} for @${postCreatorUsername}'s post: "${candidate.title.slice(0, 50)}..."`);
+          logger.info(`📈 Incremented view count by ${guestViews} (total: ${newViews}) for @${postCreatorUsername}'s post: "${candidate.title.slice(0, 50)}..."`);
         }
       }
 
@@ -288,9 +290,10 @@ export class EtiquetteService {
         .eq("feed_candidate_id", candidate.id)
         .maybeSingle();
       if (metric) {
+        const guestViews = Math.floor(Math.random() * 4) + 2;
         await supabaseAdmin!
           .from("content_metrics")
-          .update({ views: (metric.views || 0) + 1 })
+          .update({ views: (metric.views || 0) + guestViews })
           .eq("feed_candidate_id", candidate.id);
       }
 
@@ -311,7 +314,7 @@ export class EtiquetteService {
       }
 
       // Global Swarm Cooldown (to prevent multiple personas interacting in a short burst)
-      const cooldownMinutes = isHumanPost ? 3 : 1.5;
+      const cooldownMinutes = isHumanPost ? 0.25 : 1.5; // 15 seconds for human posts, 90 seconds for AI posts
       const cooldownThreshold = new Date(Date.now() - cooldownMinutes * 60 * 1000).toISOString();
 
       // 3. Dynamic pacing based on existing likes count to prevent rapid accumulation ("slowdown effect")
@@ -387,10 +390,10 @@ export class EtiquetteService {
         return;
       }
 
-      // Adjust interaction probabilities (comments should be wittier/more frequent when appropriate)
+      // Adjust interaction probabilities to align with organic like-to-view ratios (5% - 20% max)
       const interactionMultiplier = candidate.origin === "HUMAN" ? 5.5 : 4.0;
-      const commentChance = Math.min(0.70, engagementScore * profile.reply_probability * interactionMultiplier * 1.2 * likesSlowdownMultiplier);
-      const likeChance = Math.min(0.98, engagementScore * (profile.reply_probability + profile.emoji_probability) * interactionMultiplier * 3.5 * likesSlowdownMultiplier);
+      const commentChance = Math.min(0.08, engagementScore * profile.reply_probability * interactionMultiplier * 0.15 * likesSlowdownMultiplier);
+      const likeChance = Math.min(0.20, engagementScore * (profile.reply_probability + profile.emoji_probability) * interactionMultiplier * 0.4 * likesSlowdownMultiplier);
 
       logger.info(`🎲 @${persona.username} evaluating interaction on @${postCreatorUsername}'s post: [Like chance: ${(likeChance * 100).toFixed(1)}%] [Comment chance: ${(commentChance * 100).toFixed(1)}%]`);
 
@@ -399,9 +402,12 @@ export class EtiquetteService {
       // 1. Evaluate LIKE (Lower barrier, checked independently)
       if (roll < likeChance) {
         if (!hasPersonaLiked) {
-          const delay = Math.max(1, Math.round(profile.avg_response_delay_minutes * 0.3)) + spacingDelay;
+          // Instant human engagement: 5 to 45 seconds delay. Otherwise, standard pacing.
+          const delay = candidate.origin === "HUMAN"
+            ? (Math.floor(Math.random() * 41) + 5) / 60
+            : Math.max(1, Math.round(profile.avg_response_delay_minutes * 0.3)) + spacingDelay;
           await this.queueAction(personaId, persona.username, "LIKE", { post_id: candidate.reference_id, target_user_id: postCreatorId }, delay);
-          logger.info(`❤️ @${persona.username} decided to LIKE @${postCreatorUsername}'s post (enqueued with ${delay}m delay).`);
+          logger.info(`❤️ @${persona.username} decided to LIKE @${postCreatorUsername}'s post (enqueued with ${delay.toFixed(2)}m delay).`);
           enqueuedSomething = true;
         } else {
           logger.info(`@${persona.username} wanted to like post ${candidate.reference_id} but already liked it.`);
@@ -411,9 +417,12 @@ export class EtiquetteService {
       // 2. Evaluate COMMENT (Higher barrier, checked independently via a separate roll)
       const commentRoll = Math.random();
       if (commentRoll < commentChance) {
-        const delay = Math.max(1, Math.round(profile.avg_response_delay_minutes * (1.5 - state.energy))) + spacingDelay;
+        // Instant human engagement: 15 to 90 seconds delay. Otherwise, standard pacing.
+        const delay = candidate.origin === "HUMAN"
+          ? (Math.floor(Math.random() * 76) + 15) / 60
+          : Math.max(1, Math.round(profile.avg_response_delay_minutes * (1.5 - state.energy))) + spacingDelay;
         await this.queueAction(personaId, persona.username, "COMMENT", { post_id: candidate.reference_id, target_user_id: postCreatorId, candidate_id: candidate.id }, delay);
-        logger.info(`💬 @${persona.username} decided to COMMENT on @${postCreatorUsername}'s post (enqueued with ${delay}m delay).`);
+        logger.info(`💬 @${persona.username} decided to COMMENT on @${postCreatorUsername}'s post (enqueued with ${delay.toFixed(2)}m delay).`);
         enqueuedSomething = true;
       }
 
