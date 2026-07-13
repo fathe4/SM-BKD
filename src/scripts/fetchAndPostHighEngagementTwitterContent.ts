@@ -70,11 +70,10 @@ async function main() {
     const candidateTweets: any[] = [];
     
     for (const tweet of scrapedTweets) {
-      // Must have media
-      if (!tweet.imageUrl) continue;
+      // Allow text-only tweets (no image required)
 
-      // Must be Twitter CDN
-      if (!tweet.imageUrl.includes("pbs.twimg.com")) {
+      // Still skip non-CDN images if an image exists
+      if (tweet.imageUrl && !tweet.imageUrl.includes("pbs.twimg.com")) {
         continue;
       }
 
@@ -111,7 +110,7 @@ async function main() {
       candidateTweets.push(tweet);
     }
 
-    logger.info(`Valid candidates after image, thread & duplicate filters: ${candidateTweets.length}`);
+    logger.info(`Valid candidates after thread & duplicate filters: ${candidateTweets.length}`);
 
     if (candidateTweets.length === 0) {
       logger.warn("No valid high-engagement candidates found. Exiting.");
@@ -155,20 +154,24 @@ async function main() {
         continue;
       }
 
-      // Attach media
+      // Attach media (only if available)
       const mediaUrl = topTweet.mediaType === "video" ? (topTweet.videoUrl || topTweet.imageUrl) : topTweet.imageUrl;
-      logger.info(`Attaching media (${topTweet.mediaType}) directly: ${mediaUrl}`);
-      const { error: mediaErr } = await supabaseAdmin!
-        .from("post_media")
-        .insert({
-          post_id: newPost.id,
-          media_url: mediaUrl,
-          media_type: topTweet.mediaType,
-          order: 0
-        });
+      if (mediaUrl) {
+        logger.info(`Attaching media (${topTweet.mediaType}) directly: ${mediaUrl}`);
+        const { error: mediaErr } = await supabaseAdmin!
+          .from("post_media")
+          .insert({
+            post_id: newPost.id,
+            media_url: mediaUrl,
+            media_type: topTweet.mediaType,
+            order: 0
+          });
 
-      if (mediaErr) {
-        logger.error(`Failed to insert post media: ${mediaErr.message}`);
+        if (mediaErr) {
+          logger.error(`Failed to insert post media: ${mediaErr.message}`);
+        }
+      } else {
+        logger.info(`Text-only tweet — no media to attach.`);
       }
 
       // Add follow comment from another persona
@@ -213,7 +216,8 @@ function isThreadOrIncomplete(text: string): boolean {
   const t = text.trim();
   if (!t) return false;
 
-  if (t.endsWith("...") || t.endsWith("…")) {
+  // Ends with ellipses (indicates incomplete text) - only if text is short (under 100 chars)
+  if ((t.endsWith("...") || t.endsWith("…")) && t.length < 100) {
     return true;
   }
 

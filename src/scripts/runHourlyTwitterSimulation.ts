@@ -119,11 +119,10 @@ async function main() {
     const candidateTweets: TwitterScrapedPost[] = [];
     
     for (const tweet of scrapedTweets) {
-      // Rule 1: Must have an image attachment
-      if (!tweet.imageUrl) continue;
+      // Allow text-only tweets (no image required)
 
-      // Rule 2: Image URL must be from Twitter's CDN (pbs.twimg.com)
-      if (!tweet.imageUrl.includes("pbs.twimg.com")) {
+      // Rule 2: Image URL must be from Twitter's CDN (pbs.twimg.com) if an image exists
+      if (tweet.imageUrl && !tweet.imageUrl.includes("pbs.twimg.com")) {
         logger.debug(`Skipping tweet from non-X host: ${tweet.imageUrl}`);
         continue;
       }
@@ -155,10 +154,10 @@ async function main() {
       candidateTweets.push(tweet);
     }
 
-    logger.info(`Valid candidate tweets after image, thread & duplicate filters: ${candidateTweets.length}`);
+    logger.info(`Valid candidate tweets after thread & duplicate filters: ${candidateTweets.length}`);
 
     if (candidateTweets.length === 0) {
-      logger.warn("No suitable new tweets with Twitter CDN images found. Skipping simulation.");
+      logger.warn("No suitable new tweets found. Skipping simulation.");
       return;
     }
 
@@ -191,20 +190,24 @@ async function main() {
       return;
     }
 
-    // 8. Add media directly linking to Twitter's CDN URL (no Cloudinary uploading)
+    // 8. Add media directly linking to Twitter's CDN URL (only if exists)
     const mediaUrl = topTweet.mediaType === "video" ? (topTweet.videoUrl || topTweet.imageUrl) : topTweet.imageUrl;
-    logger.info(`Attaching Twitter CDN ${topTweet.mediaType} URL directly: ${mediaUrl}`);
-    const { error: mediaErr } = await supabaseAdmin!
-      .from("post_media")
-      .insert({
-        post_id: newPost.id,
-        media_url: mediaUrl,
-        media_type: topTweet.mediaType,
-        order: 0
-      });
+    if (mediaUrl) {
+      logger.info(`Attaching Twitter CDN ${topTweet.mediaType} URL directly: ${mediaUrl}`);
+      const { error: mediaErr } = await supabaseAdmin!
+        .from("post_media")
+        .insert({
+          post_id: newPost.id,
+          media_url: mediaUrl,
+          media_type: topTweet.mediaType,
+          order: 0
+        });
 
-    if (mediaErr) {
-      logger.error(`Failed to insert post media: ${mediaErr.message}`);
+      if (mediaErr) {
+        logger.error(`Failed to insert post media: ${mediaErr.message}`);
+      }
+    } else {
+      logger.info(`Text-only tweet — no media to attach.`);
     }
 
     // 9. Add "Follow on Twitter" comment from another active persona
@@ -252,8 +255,8 @@ function isThreadOrIncomplete(text: string): boolean {
   const t = text.trim();
   if (!t) return false;
 
-  // Ends with ellipses (indicates incomplete text)
-  if (t.endsWith("...") || t.endsWith("…")) {
+  // Ends with ellipses (indicates incomplete text) - only if text is short (under 100 chars)
+  if ((t.endsWith("...") || t.endsWith("…")) && t.length < 100) {
     return true;
   }
 

@@ -745,11 +745,7 @@ export class ScraperService {
       const posts = await this.scrapeTwitterProfile(profile, 5);
 
       for (const post of posts) {
-        // Enforce: Must have image attachment
-        if (!post.imageUrl) {
-          logger.info(`Skipping tweet "${post.title}" because it has no image attachment.`);
-          continue;
-        }
+        // Allow text-only tweets (no image required)
 
         // Filter out potential adult content
         if (containsAdultContent(post.title) || containsAdultContent(post.body) || containsAdultContent(post.imageUrl || "") || containsAdultContent(post.url || "")) {
@@ -771,7 +767,7 @@ export class ScraperService {
           const { data: titleDup } = await supabaseAdmin!
             .from("feed_candidates")
             .select("id")
-            .eq("title", post.title)
+            .eq("title", post.body || post.title) // match what gets stored: raw body
             .limit(1)
             .maybeSingle();
 
@@ -789,14 +785,16 @@ export class ScraperService {
 
           if (dupFeed) continue;
 
-          // Check duplicate in scraped_candidates using imageurl
-          const { data: dupScraped } = await supabaseAdmin!
-            .from("scraped_candidates")
-            .select("id")
-            .eq("image_url", post.imageUrl)
-            .maybeSingle();
+          // Check duplicate in scraped_candidates using imageurl (only when imageUrl is available)
+          if (post.imageUrl) {
+            const { data: dupScraped } = await supabaseAdmin!
+              .from("scraped_candidates")
+              .select("id")
+              .eq("image_url", post.imageUrl)
+              .maybeSingle();
 
-          if (dupScraped) continue;
+            if (dupScraped) continue;
+          }
 
           // Category mapping
           let category = "technology";

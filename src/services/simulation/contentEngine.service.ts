@@ -205,7 +205,6 @@ export class ContentEngineService {
                 .select("*")
                 .in("candidate_type", ["news", "trending_discussion"])
                 .eq("is_used", false)
-                .not("imageurl", "is", null) // Prioritize candidates with image attachments
                 .order("importance", { ascending: false })
                 .limit(1000);
 
