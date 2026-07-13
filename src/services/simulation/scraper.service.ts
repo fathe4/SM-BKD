@@ -785,16 +785,37 @@ export class ScraperService {
 
           if (dupFeed) continue;
 
-          // Check duplicate in scraped_candidates using imageurl (only when imageUrl is available)
-          if (post.imageUrl) {
-            const { data: dupScraped } = await supabaseAdmin!
+          // Check duplicate in scraped_candidates using URL, title, and imageurl
+          let isDupScraped = false;
+          if (post.url) {
+            const { data: urlDupScraped } = await supabaseAdmin!
+              .from("scraped_candidates")
+              .select("id")
+              .eq("raw_content->>url", post.url)
+              .limit(1)
+              .maybeSingle();
+            if (urlDupScraped) isDupScraped = true;
+          }
+          if (!isDupScraped && post.title) {
+            const { data: titleDupScraped } = await supabaseAdmin!
+              .from("scraped_candidates")
+              .select("id")
+              .eq("raw_content->>title", post.title)
+              .limit(1)
+              .maybeSingle();
+            if (titleDupScraped) isDupScraped = true;
+          }
+          if (!isDupScraped && post.imageUrl) {
+            const { data: imgDupScraped } = await supabaseAdmin!
               .from("scraped_candidates")
               .select("id")
               .eq("image_url", post.imageUrl)
+              .limit(1)
               .maybeSingle();
-
-            if (dupScraped) continue;
+            if (imgDupScraped) isDupScraped = true;
           }
+
+          if (isDupScraped) continue;
 
           // Category mapping
           let category = "technology";

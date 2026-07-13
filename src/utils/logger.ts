@@ -7,8 +7,58 @@ config();
 const logLevel = process.env.LOG_LEVEL || "info";
 const env = process.env.NODE_ENV || "development";
 
+// Define a custom filter format to keep only errors, warnings, startup logs, and direct actions (like, comment, friend request, greetings)
+const filterInfoLogs = winston.format((info) => {
+  const level = info.level.toLowerCase();
+  if (level === "error" || level === "warn") {
+    return info;
+  }
+  
+  const msg = ((info as any).message || "").toString().toLowerCase();
+  
+  // Allow startup/system status logs
+  if (
+    msg.includes("initialize") || 
+    msg.includes("starting") || 
+    msg.includes("redis") || 
+    msg.includes("socket.io") || 
+    msg.includes("server running") ||
+    msg.includes("server listening") ||
+    msg.includes("express")
+  ) {
+    return info;
+  }
+
+  // Allow candidate choosing actions: like, comment, friend request, greetings, success
+  const isInteraction = 
+    msg.includes("like") || 
+    msg.includes("comment") || 
+    msg.includes("friend") || 
+    msg.includes("greet") || 
+    msg.includes("chat") || 
+    msg.includes("success");
+  
+  if (isInteraction) {
+    if (
+      msg.includes("evaluating") || 
+      msg.includes("scrolled") || 
+      msg.includes("skipping") || 
+      msg.includes("viewed post") || 
+      msg.includes("pacing") || 
+      msg.includes("slowdown") || 
+      msg.includes("cooldown")
+    ) {
+      return false;
+    }
+    return info;
+  }
+
+  return false;
+});
+
 // Define the custom format for our logger
 const logFormat = winston.format.combine(
+  filterInfoLogs(),
   winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
   winston.format.errors({ stack: true }),
   env === "development"

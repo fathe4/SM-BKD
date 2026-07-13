@@ -514,6 +514,24 @@ export class SimulationEngine {
         await ContentEngineService.generateAndPublishPost(persona.id, profileName);
       }
 
+      if (job.action_type === "FRIEND_REQUEST") {
+        const humanUserId = job.payload?.human_user_id;
+        if (!humanUserId) {
+          logger.warn(`Skipping FRIEND_REQUEST job ${job.id} due to missing human_user_id.`);
+          await supabaseAdmin!.from("behavior_jobs").update({ status: "done" }).eq("id", job.id);
+          return;
+        }
+
+        const { FriendshipService } = require("../friendshipService");
+        const friendship = await FriendshipService.getFriendshipBetweenUsers(persona.user_id, humanUserId);
+        if (!friendship) {
+          logger.info(`AI user ${persona.user_id} (@${persona.username}) sending friend request to human ${humanUserId} via scheduled behavior job.`);
+          await FriendshipService.sendFriendRequest(persona.user_id, humanUserId);
+        } else {
+          logger.info(`FRIEND_REQUEST job ${job.id}: Friendship already exists between @${persona.username} and human ${humanUserId} (status: ${friendship.status}).`);
+        }
+      }
+
       if (job.action_type === "GREET_SIMPLE" || job.action_type === "GREET_PROFILE") {
         const humanUserId = job.payload?.human_user_id;
         const opportunityId = job.payload?.opportunity_id;
@@ -580,6 +598,8 @@ export class SimulationEngine {
         }
 
         // 3. Sleeping check
+        const isFriendAcceptedJob = job.payload?.opportunity_type === "FRIEND_ACCEPTED";
+        
         let timezoneOffset = 0;
         if (persona.timezone === "EST") timezoneOffset = -5;
         else if (persona.timezone === "PST") timezoneOffset = -8;
@@ -590,7 +610,7 @@ export class SimulationEngine {
 
         const localHour = (new Date().getUTCHours() + timezoneOffset + 24) % 24;
         const isAwake = localHour >= 7 && localHour <= 23;
-        if (!isAwake) {
+        if (!isAwake && !isFriendAcceptedJob) {
           const tomorrow = new Date();
           tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
           const targetUtcHour = (7 + 24 - timezoneOffset) % 24;
@@ -611,7 +631,7 @@ export class SimulationEngine {
           .eq("persona_id", persona.id)
           .single();
 
-        if (stateData) {
+        if (stateData && !isFriendAcceptedJob) {
           const todayDmCount = stateData.today_dm_count || 0;
           const todayDmBudget = stateData.today_dm_budget || 5;
           if (todayDmCount >= todayDmBudget) {
@@ -642,10 +662,10 @@ export class SimulationEngine {
         let greetingText = "";
         if (job.action_type === "GREET_SIMPLE") {
           const simpleGreetings = [
-            `hey! thanks for connecting. how's it going?`,
-            `hey, thanks for the add! what are you up to?`,
-            `hi there! nice to connect. what do you do?`,
-            `hey! good to have you in my network. been busy?`
+            `hey! thanks for connecting. glad to have you in my network.`,
+            `hey, thanks for the add. good to connect.`,
+            `hi there! nice to connect.`,
+            `hey! glad to connect with you.`
           ];
           greetingText = simpleGreetings[Math.floor(Math.random() * simpleGreetings.length)];
         } else {
@@ -656,9 +676,9 @@ export class SimulationEngine {
             .maybeSingle();
           const profession = profile?.occupation || "";
           
-          let instructionPrompt = "Become friends with them. Say hi and ask a natural question about their background or profession.";
+          let instructionPrompt = "Become friends with them. Say hi and introduce yourself, but do not ask any questions.";
           if (profession) {
-            instructionPrompt = `Become friends with them. Say hi and ask a brief, natural question related to their work/profession as a ${profession}.`;
+            instructionPrompt = `Become friends with them. Say hi, introduce yourself, and acknowledge their work as a ${profession}, but do not ask any questions.`;
           }
 
           const promptOverride = [

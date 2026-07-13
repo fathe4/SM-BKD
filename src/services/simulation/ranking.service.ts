@@ -69,6 +69,32 @@ export class RankingService {
       }
     });
 
+    // Fetch all referenced posts for candidates of type user_post/ai_post to avoid duplicating content in database
+    const postIds = candidates
+      .filter(c => (c.candidate_type === "user_post" || c.candidate_type === "ai_post") && c.reference_id)
+      .map(c => c.reference_id);
+
+    const postMap = new Map<string, { content: string; imageUrl?: string | null }>();
+    if (postIds.length > 0) {
+      try {
+        const { data: posts } = await supabaseAdmin!
+          .from("posts")
+          .select("id, content, post_media(media_url)")
+          .in("id", postIds);
+
+        (posts || []).forEach((p: any) => {
+          const mList = p.post_media as any[];
+          const mediaUrl = mList && mList.length > 0 ? mList[0].media_url : null;
+          postMap.set(p.id, {
+            content: p.content || "",
+            imageUrl: mediaUrl
+          });
+        });
+      } catch (err: any) {
+        logger.error(`Error fetching posts for ranking feed candidates: ${err.message}`);
+      }
+    }
+
     logger.info(`Ranking ${candidates.length} candidates for ${personas.length} personas (excluding seen items)...`);
 
     const allTop100Items: { persona_id: string; feed_candidate_id: string; score: number; reason: string }[] = [];
@@ -104,8 +130,14 @@ export class RankingService {
           }
         }
 
+        // Dynamic content resolution to avoid database content duplication
+        const postData = candidate.reference_id ? postMap.get(candidate.reference_id) : null;
+        const candidateTitle = postData ? (postData.content ? postData.content.slice(0, 80) + "..." : "New Post") : candidate.title;
+        const candidateSummary = postData ? postData.content : candidate.summary;
+        const candidateImageUrl = postData ? postData.imageUrl : (candidate.imageUrl || candidate.imageurl);
+
         let interestScore = 0.2; // Default baseline interest
-        if (candidate.imageUrl || candidate.imageurl) {
+        if (candidateImageUrl) {
           // Visual content gets higher baseline interest
           interestScore = 0.5;
         }
@@ -116,7 +148,7 @@ export class RankingService {
         }
 
         // Compute interest match based on topics and content
-        const candidateText = `${candidate.title} ${candidate.summary} ${candidate.topics.join(" ")}`.toLowerCase();
+        const candidateText = `${candidateTitle} ${candidateSummary} ${candidate.topics.join(" ")}`.toLowerCase();
         for (const [topic, weight] of Object.entries(interestMap)) {
           if (candidateText.includes(topic)) {
             interestScore = Math.max(interestScore, weight);

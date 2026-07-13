@@ -349,9 +349,9 @@ export class IngestionService {
           candidate_type: "user_post",
           origin: origin,
           reference_id: post.id,
-          title: title,
-          summary: post.content || "",
-          imageurl: imageUrl || undefined,
+          title: `[post:${post.id}]`, // Metadata pointer, resolved dynamically
+          summary: "", // Do not duplicate content
+          imageurl: null, // Do not duplicate imageUrl
           importance: origin === "HUMAN" ? 0.9 : 0.85, // Humans and AI personas get high initial ranking
           topics: topics,
           published_at: post.created_at,
@@ -373,5 +373,78 @@ export class IngestionService {
       }
     }
     return count;
+  }
+
+  /**
+   * Ingest a single post immediately into feed_candidates
+   */
+  static async ingestSinglePost(postId: string): Promise<any> {
+    try {
+      const { data: post, error } = await supabaseAdmin!
+        .from("posts")
+        .select("id, user_id, content, created_at, is_ai_generated, users(username, is_ai), post_media(media_url)")
+        .eq("id", postId)
+        .single();
+
+      if (error || !post) {
+        logger.error(`Error fetching post ${postId} for ingestion: ${error?.message}`);
+        return null;
+      }
+
+      // Check duplicate
+      const { data: duplicate } = await supabaseAdmin!
+        .from("feed_candidates")
+        .select("id")
+        .eq("reference_id", post.id)
+        .maybeSingle();
+
+      if (duplicate) return duplicate;
+
+      const user = post.users as any;
+      const origin = user?.is_ai ? "AI" : "HUMAN";
+      
+      const mediaList = post.post_media as any[];
+      const imageUrl = mediaList && mediaList.length > 0 ? mediaList[0].media_url : null;
+
+      let title = post.content ? post.content.slice(0, 80) + "..." : "New Post";
+      if (!post.content && imageUrl) {
+        title = "Shared an image";
+      }
+      title = `${title} [post:${post.id}]`;
+
+      const topics = ["technology", "ai", "programming", "gaming", "science", "design", "ux", "marketing", "business", "startups", "funny", "devto", "general"];
+
+      const { data: newCandidate } = await supabaseAdmin!
+        .from("feed_candidates")
+        .insert({
+          candidate_type: "user_post",
+          origin: origin,
+          reference_id: post.id,
+          title: `[post:${post.id}]`, // Metadata pointer, resolved dynamically
+          summary: "", // Do not duplicate content
+          imageurl: null, // Do not duplicate imageUrl
+          importance: origin === "HUMAN" ? 0.9 : 0.85,
+          topics: topics,
+          published_at: post.created_at,
+          expires_at: new Date(Date.now() + 72 * 3600 * 1000).toISOString()
+        })
+        .select()
+        .single();
+
+      if (newCandidate) {
+        // Initialize metrics
+        await supabaseAdmin!.from("content_metrics").insert({
+          feed_candidate_id: newCandidate.id,
+          views: 0,
+          likes: 0,
+          comments: 0,
+          novelty: 1.0
+        });
+        return newCandidate;
+      }
+    } catch (err: any) {
+      logger.error(`Error ingesting single post ${postId}: ${err.message}`);
+    }
+    return null;
   }
 }

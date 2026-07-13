@@ -62,7 +62,12 @@ export class BehaviorScheduler {
   ): Promise<void> {
     try {
       // 1. Record behavior decision to behavior_decisions table
-      const delayMs = this.calculateDelayMs(ctx);
+      let delayMs = this.calculateDelayMs(ctx);
+      if (ctx.opportunity?.type === "FRIEND_ACCEPTED") {
+        // Guarantee quick response (10s to 120s) for newly accepted friendship chat greetings
+        delayMs = Math.random() * (120000 - 10000) + 10000;
+        logger.info(`Scheduler: Overriding delay to ${(delayMs / 1000).toFixed(0)}s for FRIEND_ACCEPTED greeting job.`);
+      }
       const runAt = new Date(Date.now() + delayMs);
 
       const { data: decisionRow, error: decError } = await supabaseAdmin!
@@ -93,6 +98,7 @@ export class BehaviorScheduler {
           reason: decisionResult.reason,
           opportunityId: opportunityId,
           opportunity_id: opportunityId, // For backward compatibility with existing worker
+          opportunity_type: ctx.opportunity?.type || null,
           decisionId: decisionRow.id
         };
 
