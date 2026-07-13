@@ -9,6 +9,30 @@ export class EtiquetteService {
    */
   static async evaluateEngagement(personaId: string, candidate: any): Promise<void> {
     try {
+      // Resolve content dynamically if it's a user post or AI post to avoid duplicating content in database
+      let candidateSummary = candidate.summary || "";
+      let candidateTitle = candidate.title || "";
+      if ((candidate.candidate_type === "user_post" || candidate.candidate_type === "ai_post") && candidate.reference_id) {
+        if (candidate._resolvedContent) {
+          candidateSummary = candidate._resolvedContent.summary;
+          candidateTitle = candidate._resolvedContent.title;
+        } else {
+          const { data: post } = await supabaseAdmin!
+            .from("posts")
+            .select("content")
+            .eq("id", candidate.reference_id)
+            .single();
+          if (post && post.content) {
+            candidateSummary = post.content;
+            candidateTitle = post.content.slice(0, 80) + "...";
+            candidate._resolvedContent = {
+              summary: candidateSummary,
+              title: candidateTitle
+            };
+          }
+        }
+      }
+
       // 1. Fetch persona's profile, state, and conversation preferences
       const { data: persona } = await supabaseAdmin!
         .from("persona_identities")
@@ -151,7 +175,7 @@ export class EtiquetteService {
           }
 
           // Check Novelty: If any existing comment shares > 50% keyword similarity, mark as duplicate
-          const candidateWords = new Set(candidate.summary.toLowerCase().split(/\s+/));
+          const candidateWords = new Set(candidateSummary.toLowerCase().split(/\s+/));
           for (const c of comments) {
             const commentWords = c.content.toLowerCase().split(/\s+/);
             const matches = commentWords.filter((w: string) => candidateWords.has(w)).length;
@@ -262,7 +286,7 @@ export class EtiquetteService {
       }
 
       // Record the view
-      logger.info(`👀 @${persona.username} viewed post by @${postCreatorUsername}: "${candidate.title.slice(0, 50)}..."`);
+      logger.info(`👀 @${persona.username} viewed post by @${postCreatorUsername}: "${candidateTitle.slice(0, 50)}..."`);
       
       // Update post view count
       if (candidate.reference_id && candidate.candidate_type === "user_post") {
@@ -279,7 +303,7 @@ export class EtiquetteService {
             .from("posts")
             .update({ view_count: newViews })
             .eq("id", candidate.reference_id);
-          logger.info(`📈 Incremented view count by ${guestViews} (total: ${newViews}) for @${postCreatorUsername}'s post: "${candidate.title.slice(0, 50)}..."`);
+          logger.info(`📈 Incremented view count by ${guestViews} (total: ${newViews}) for @${postCreatorUsername}'s post: "${candidateTitle.slice(0, 50)}..."`);
         }
       }
 
@@ -402,9 +426,9 @@ export class EtiquetteService {
       // 1. Evaluate LIKE (Lower barrier, checked independently)
       if (roll < likeChance) {
         if (!hasPersonaLiked) {
-          // Instant human engagement: 5 to 45 seconds delay. Otherwise, standard pacing.
+          // Organic human engagement: 30 seconds to 4 minutes delay. Otherwise, standard pacing.
           const delay = candidate.origin === "HUMAN"
-            ? (Math.floor(Math.random() * 41) + 5) / 60
+            ? (Math.floor(Math.random() * 211) + 30) / 60
             : Math.max(1, Math.round(profile.avg_response_delay_minutes * 0.3)) + spacingDelay;
           await this.queueAction(personaId, persona.username, "LIKE", { post_id: candidate.reference_id, target_user_id: postCreatorId }, delay);
           logger.info(`❤️ @${persona.username} decided to LIKE @${postCreatorUsername}'s post (enqueued with ${delay.toFixed(2)}m delay).`);
@@ -417,9 +441,9 @@ export class EtiquetteService {
       // 2. Evaluate COMMENT (Higher barrier, checked independently via a separate roll)
       const commentRoll = Math.random();
       if (commentRoll < commentChance) {
-        // Instant human engagement: 15 to 90 seconds delay. Otherwise, standard pacing.
+        // Organic human engagement: 1 to 4.5 minutes delay. Otherwise, standard pacing.
         const delay = candidate.origin === "HUMAN"
-          ? (Math.floor(Math.random() * 76) + 15) / 60
+          ? (Math.floor(Math.random() * 211) + 60) / 60
           : Math.max(1, Math.round(profile.avg_response_delay_minutes * (1.5 - state.energy))) + spacingDelay;
         await this.queueAction(personaId, persona.username, "COMMENT", { post_id: candidate.reference_id, target_user_id: postCreatorId, candidate_id: candidate.id }, delay);
         logger.info(`💬 @${persona.username} decided to COMMENT on @${postCreatorUsername}'s post (enqueued with ${delay.toFixed(2)}m delay).`);

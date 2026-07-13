@@ -202,8 +202,8 @@ export class AiBehaviorService {
           logger.info(`Auto-accepting friend request ${req.id} (human→AI)`);
           await FriendshipService.updateFriendshipStatus(req.id, FriendshipStatus.ACCEPTED);
 
-          // 60% chance to send an initial greeting
-          if (Math.random() < 0.60) {
+          // 100% chance to send an initial greeting to guarantee chat after friend request
+          if (true) {
             setTimeout(async () => {
               try {
                 const chatRes = await ChatService.createChat({

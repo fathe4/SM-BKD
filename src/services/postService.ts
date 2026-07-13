@@ -53,6 +53,17 @@ export class PostService {
                 // Ignore if socket.io is not active (e.g. running migrations or scripts)
             }
 
+            // Trigger human post engagement check via domain event
+            try {
+                const { domainEvents } = require("../events/domainEvents");
+                domainEvents.emit("POST_CREATED", {
+                    postId: data.id,
+                    authorId: data.user_id
+                });
+            } catch (err: any) {
+                logger.error(`Error emitting POST_CREATED event: ${err.message}`);
+            }
+
             // Cache invalidation will be handled by controllers/services after media insertion
             return data as Post;
         },
