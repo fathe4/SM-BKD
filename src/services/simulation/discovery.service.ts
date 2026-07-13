@@ -1,6 +1,6 @@
 import Parser from "rss-parser";
 import axios from "axios";
-import OpenAI from "openai";
+import { LlmProvider } from "../llm/llmProvider";
 import { supabaseAdmin } from "../../config/supabase";
 import { logger } from "../../utils/logger";
 
@@ -13,7 +13,7 @@ const parser = new Parser({
   }
 });
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
 
 const FEED_SOURCES = [
   { category: "technology", url: "https://feeds.arstechnica.com/arstechnica/technology-lab" },
@@ -220,17 +220,17 @@ ${JSON.stringify(rawArticles.map(a => ({
 `;
 
     try {
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+      const client = LlmProvider.for("topic_extract");
+      const response = await client.complete({
         messages: [
           { role: "system", content: "You are an expert system that extracts, normalizes, and deduplicates news articles into structured JSON." },
           { role: "user", content: prompt }
         ],
         response_format: { type: "json_object" },
-        temperature: 0.2
+        temperature: 0.2,
       });
 
-      const result = JSON.parse(response.choices[0].message.content || "{}");
+      const result = JSON.parse(response.content || "{}");
       return (result.topics || []) as DiscoveredTopic[];
     } catch (e: any) {
       logger.error(`LLM topic extraction failed: ${e.message}`);

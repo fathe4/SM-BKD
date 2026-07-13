@@ -42,6 +42,17 @@ export class PostService {
                 throw new AppError(error.message, 400);
             }
 
+            // Emit new post socket event
+            try {
+                const { getIO } = require("../socketio");
+                const io = getIO();
+                if (io) {
+                    io.emit("post:new", data);
+                }
+            } catch (err) {
+                // Ignore if socket.io is not active (e.g. running migrations or scripts)
+            }
+
             // Cache invalidation will be handled by controllers/services after media insertion
             return data as Post;
         },
@@ -1661,6 +1672,9 @@ export class PostService {
 
             // Invalidate popular posts cache (new post might affect popularity)
             await redisService.invalidatePopularPosts();
+
+            // Clear all user feed caches to ensure immediate visibility of public/recommended posts
+            await redisService.deletePattern("feed:user:*");
 
             logger.info(
                 `Invalidated feed caches for user ${userId} and ${friendIds.length} friends`

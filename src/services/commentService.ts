@@ -122,6 +122,19 @@ export class CommentService {
         throw new AppError(error.message, 400);
       }
 
+      // Increment target post's view count (since commenting implies viewing)
+      try {
+        const currentViews = post.view_count || 0;
+        const newViews = Math.max(currentViews, 1) + 1;
+        await supabaseAdmin!
+          .from("posts")
+          .update({ view_count: newViews })
+          .eq("id", commentData.post_id);
+        logger.info(`👁️ Incremented views on post ${commentData.post_id} to ${newViews} via comment creation.`);
+      } catch (err: any) {
+        logger.warn(`Failed to increment post view count on comment: ${err.message}`);
+      }
+
       // Create notification for post owner if it's not their own comment
       if (post.user_id !== commentData.user_id) {
         try {

@@ -1,31 +1,15 @@
-import OpenAI from "openai";
 import { logger } from "../../utils/logger";
 import { Intent } from "../../models/ai-persona.model";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { LlmProvider } from "../llm/llmProvider";
 
 export class LlmRendererService {
-  private static async callOpenAiWithRetry(params: any, retries = 3, delayMs = 1000): Promise<any> {
-    try {
-      return await openai.chat.completions.create(params);
-    } catch (err: any) {
-      const isRateLimit = err.status === 429 || err.statusCode === 429 || err.message?.includes("429") || err.message?.includes("Rate limit");
-      if (isRateLimit && retries > 0) {
-        logger.warn(`OpenAI rate limit hit (429). Retrying in ${delayMs}ms... (Retries left: ${retries})`);
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-        return this.callOpenAiWithRetry(params, retries - 1, delayMs * 2);
-      }
-      throw err;
-    }
-  }
-
   /**
    * Stage 1: Render Post or Comment based on Persona Profile and Intent
    */
   static async renderContent(
-    persona: any, 
-    intent: Intent, 
-    postContent?: string, 
+    persona: any,
+    intent: Intent,
+    postContent?: string,
     imageUrl?: string | null,
     existingComments?: string[],
     postType?: string
@@ -68,10 +52,7 @@ Analyze the post. What is it saying or requesting? Write a matching response to 
       }
 
       if (existingComments && existingComments.length > 0) {
-        textContent += `\n\nHere are the comments that other users have already written on this post. Read them carefully and avoid repeating their phrasing, observations, or ideas:
-${existingComments.map((c) => `- "${c}"`).join("\n")}
-
-CRITICAL: Your comment must NOT repeat or reuse the same observations, keywords, or topics that are already discussed in the comments above. Try to cover a different aspect or react in a unique way.`;
+        textContent += `\n\nHere are the comments that other users have already written on this post. Read them carefully and avoid repeating their phrasing, observations, or ideas:\n${existingComments.map((c) => `- "${c}"`).join("\n")}\n\nCRITICAL: Your comment must NOT repeat or reuse the same observations, keywords, or topics that are already discussed in the comments above. Try to cover a different aspect or react in a unique way.`;
       }
 
       if (imageUrl) {
@@ -140,45 +121,35 @@ RULES:
     }
 
     try {
-      const response = await this.callOpenAiWithRetry({
-        model: "gpt-4o-mini",
+      const task = intent.action === "COMMENT" ? "comment" : "post_generate";
+      const client = LlmProvider.for(task);
+      const cfg = LlmProvider.getConfig(task);
+      logger.debug(`[LlmRenderer] renderContent task=${task} provider=${cfg.provider} model=${cfg.model}`);
+
+      const response = await client.complete({
         messages: [
           { role: "system", content: systemPrompt },
-          { 
-            role: "user", 
-            content: userPromptContent as any
-          }
+          { role: "user", content: userPromptContent }
         ],
-        temperature: 0.8
+        temperature: 0.8,
       });
 
-      const draft = response.choices[0].message.content || "";
+      const draft = response.content;
       if (draft.trim() === "IGNORE") {
         return { content: "IGNORE" };
       }
-      
+
       let content = draft.trim();
       if (intent.action === "COMMENT") {
         // Strip common prefixes like "Response:", "Comment:", "Reply:", etc.
         content = content.replace(/^(response|comment|reply|post|output)\s*:\s*/i, "");
         // Remove wrapping quotes (both straight and curly/unicode quotes)
-        content = content.replace(/^["'“”‘’«»]|["'“”‘’«»]$/g, "").trim();
+        content = content.replace(/^["'""''«»]|["'""''«»]$/g, "").trim();
       } else {
         content = content.replace(/^["']|["']$/g, "").trim();
       }
 
-      const prompt_tokens = response.usage?.prompt_tokens || 0;
-      const completion_tokens = response.usage?.completion_tokens || 0;
-      const estimated_cost_usd = (prompt_tokens * 0.15 + completion_tokens * 0.60) / 1000000;
-
-      return {
-        content,
-        usage: {
-          prompt_tokens,
-          completion_tokens,
-          estimated_cost_usd
-        }
-      };
+      return { content, usage: response.usage };
     } catch (err: any) {
       logger.error(`Error rendering content in LlmRenderer: ${err.message}`);
       return { content: "" };
@@ -214,15 +185,13 @@ Only return the final text. Do not write explanation wrappers.
     `.trim();
 
     try {
-      const response = await this.callOpenAiWithRetry({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "user", content: prompt }
-        ],
-        temperature: 0.5
+      const task = isComment ? "comment_critique" : "post_generate";
+      const client = LlmProvider.for(task);
+      const response = await client.complete({
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.5,
       });
-
-      return (response.choices[0].message.content || draft).replace(/^["']|["']$/g, "").trim();
+      return (response.content || draft).replace(/^["']|["']$/g, "").trim();
     } catch (err) {
       logger.error(`Error in LLM critique phase: ${err}`);
       return draft;
@@ -232,12 +201,13 @@ Only return the final text. Do not write explanation wrappers.
   /**
    * Moderate scraped posts in a single prompt.
    * Returns a list of indexes of posts that are safe, interesting, and clean.
+   * NOTE: Currently disabled in the scraping pipeline.
    */
   static async moderatePosts(posts: { title: string; body: string; source: string }[]): Promise<number[]> {
     if (posts.length === 0) return [];
-    
+
     const formattedList = posts.map((p, idx) => `ID: ${idx}\nSource: ${p.source}\nTitle: "${p.title}"\nBody: "${p.body}"\n`).join("\n---\n\n");
-    
+
     const prompt = `
 You are a content moderation and quality assurance AI for a premium social network.
 Analyze the following list of scraped posts from Reddit and Twitter.
@@ -265,15 +235,13 @@ ${formattedList}
     `.trim();
 
     try {
-      const response = await this.callOpenAiWithRetry({
-        model: "gpt-4o-mini",
+      const client = LlmProvider.for("scrape_moderate");
+      const response = await client.complete({
         messages: [{ role: "user", content: prompt }],
         response_format: { type: "json_object" },
-        temperature: 0.1
+        temperature: 0.1,
       });
-
-      const resText = response.choices[0].message.content || "{}";
-      const data = JSON.parse(resText);
+      const data = JSON.parse(response.content || "{}");
       return Array.isArray(data.approved_indices) ? data.approved_indices : [];
     } catch (err: any) {
       logger.error(`Error in moderatePosts LLM call: ${err.message}`);
@@ -284,6 +252,7 @@ ${formattedList}
 
   /**
    * Pre-generate funny, thoughtful, and technical post variations for an approved post.
+   * NOTE: Currently disabled in the scraping pipeline.
    */
   static async generateVariations(post: { title: string; body: string; source: string }): Promise<{ funny: string; thoughtful: string; technical: string; usage?: { prompt_tokens: number; completion_tokens: number; estimated_cost_usd: number } } | null> {
     const prompt = `
@@ -317,29 +286,19 @@ Ensure the output is valid JSON only. Do not wrap in backticks or Markdown codeb
     `.trim();
 
     try {
-      const response = await this.callOpenAiWithRetry({
-        model: "gpt-4o-mini",
+      const client = LlmProvider.for("scrape_variations");
+      const response = await client.complete({
         messages: [{ role: "user", content: prompt }],
         response_format: { type: "json_object" },
-        temperature: 0.8
+        temperature: 0.8,
       });
-
-      const resText = response.choices[0].message.content || "{}";
-      const data = JSON.parse(resText);
-      const prompt_tokens = response.usage?.prompt_tokens || 0;
-      const completion_tokens = response.usage?.completion_tokens || 0;
-      const estimated_cost_usd = (prompt_tokens * 0.15 + completion_tokens * 0.60) / 1000000;
-
+      const data = JSON.parse(response.content || "{}");
       if (data.funny && data.thoughtful && data.technical) {
         return {
           funny: data.funny.trim(),
           thoughtful: data.thoughtful.trim(),
           technical: data.technical.trim(),
-          usage: {
-            prompt_tokens,
-            completion_tokens,
-            estimated_cost_usd
-          }
+          usage: response.usage,
         };
       }
       return null;
@@ -347,7 +306,9 @@ Ensure the output is valid JSON only. Do not wrap in backticks or Markdown codeb
       logger.error(`Error in generateVariations LLM call: ${err.message}`);
       return null;
     }
-  }  /**
+  }
+
+  /**
    * Sanitize raw LLM output to remove AI formatting artifacts.
    * Strips: @username: prefix, surrounding quotes, roleplay tags, stage directions, "As an AI" phrases.
    */
@@ -383,7 +344,6 @@ Ensure the output is valid JSON only. Do not wrap in backticks or Markdown codeb
 
   /**
    * Build the system prompt for a DM chat reply.
-   * Implements Phase 1 (prompt overhaul) + Phase 6 (human invisibility).
    */
   private static buildChatSystemPrompt(
     persona: any,
@@ -393,7 +353,6 @@ Ensure the output is valid JSON only. Do not wrap in backticks or Markdown codeb
   ): string {
     const personality = persona.personality_json || {};
     const extrav = personality.extraversion || 0.5;
-    const conscient = personality.conscientiousness || 0.5;
 
     // Personality-driven tone hints
     const toneHint = extrav > 0.7
@@ -460,7 +419,6 @@ STRICT RULES — follow every single one:
 
   /**
    * Render a casual direct message response as the persona.
-   * Implements Phases 1–6: prompt overhaul, sanitization, memory injection, human invisibility.
    */
   static async renderChatMessage(
     persona: any,
@@ -485,24 +443,18 @@ STRICT RULES — follow every single one:
     const userPrompt = `Chat so far:\n${chatHistoryText}\n\nYour reply as ${persona.username}:`;
 
     try {
-      const response = await this.callOpenAiWithRetry({
-        model: "gpt-4o-mini",
+      const client = LlmProvider.for("chat");
+      const response = await client.complete({
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
         ],
         temperature: 0.85,
-        max_tokens: 80   // Hard cap — keeps replies short
+        max_tokens: 80, // Hard cap — keeps replies short
       });
 
-      const raw = response.choices[0].message.content || "";
-      const content = this.sanitizeChatOutput(raw);
-
-      const prompt_tokens = response.usage?.prompt_tokens || 0;
-      const completion_tokens = response.usage?.completion_tokens || 0;
-      const estimated_cost_usd = (prompt_tokens * 0.15 + completion_tokens * 0.60) / 1000000;
-
-      return { content, usage: { prompt_tokens, completion_tokens, estimated_cost_usd } };
+      const content = this.sanitizeChatOutput(response.content);
+      return { content, usage: response.usage };
     } catch (err: any) {
       logger.error(`Error rendering chat message in LlmRenderer: ${err.message}`);
       return { content: "" };
@@ -532,18 +484,17 @@ Return ONLY valid JSON. No explanation text.`;
     const userPrompt = `Extract personal facts from this message:\n"${aiReply}"`;
 
     try {
-      const response = await this.callOpenAiWithRetry({
-        model: "gpt-4o-mini",
+      const client = LlmProvider.for("memory");
+      const response = await client.complete({
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
         ],
         temperature: 0.1,
-        max_tokens: 300
+        max_tokens: 300,
       });
 
-      const raw = response.choices[0].message.content || "[]";
-      const parsed = JSON.parse(raw);
+      const parsed = JSON.parse(response.content || "[]");
       if (!Array.isArray(parsed)) return [];
       return parsed;
     } catch {
