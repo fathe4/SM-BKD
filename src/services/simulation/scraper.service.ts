@@ -33,6 +33,22 @@ export interface TwitterScrapedPost {
 export class ScraperService {
   private static isScraping: boolean = false;
 
+  private static getTwitterSessionPath(): string {
+    const cwdPath = path.join(process.cwd(), "src/scripts/twitter-session.json");
+    if (fs.existsSync(cwdPath)) {
+      return cwdPath;
+    }
+    const relativePath = path.resolve(__dirname, "../../scripts/twitter-session.json");
+    if (fs.existsSync(relativePath)) {
+      return relativePath;
+    }
+    const cwdDistPath = path.join(process.cwd(), "dist/scripts/twitter-session.json");
+    if (fs.existsSync(cwdDistPath)) {
+      return cwdDistPath;
+    }
+    return relativePath;
+  }
+
   /**
    * Scrape posts from a subreddit using Playwright Chromium
    */
@@ -173,7 +189,7 @@ export class ScraperService {
    */
   public static async scrapeTwitterProfile(profile: string, limit: number = 10): Promise<TwitterScrapedPost[]> {
     logger.info(`Starting Playwright scraping for Twitter profile @${profile}...`);
-    const sessionPath = "/home/fathe/Desktop/Social media/SM-BKD/src/scripts/twitter-session.json";
+    const sessionPath = this.getTwitterSessionPath();
     let browser;
     try {
       browser = await chromium.launch({
@@ -356,7 +372,7 @@ export class ScraperService {
    */
   public static async scrapeTwitterPersonalFeed(limit: number = 15): Promise<TwitterScrapedPost[]> {
     logger.info("Starting Playwright scraping for Twitter home feed...");
-    const sessionPath = "/home/fathe/Desktop/Social media/SM-BKD/src/scripts/twitter-session.json";
+    const sessionPath = this.getTwitterSessionPath();
     if (!fs.existsSync(sessionPath)) {
       logger.warn("No saved Twitter session found! Cannot scrape feed.");
       return [];
@@ -541,7 +557,7 @@ export class ScraperService {
    */
   public static async scrapeTwitterSearch(topic: string, limit: number = 15): Promise<TwitterScrapedPost[]> {
     logger.info(`Starting Playwright scraping for Twitter search topic: "${topic}"...`);
-    const sessionPath = "/home/fathe/Desktop/Social media/SM-BKD/src/scripts/twitter-session.json";
+    const sessionPath = this.getTwitterSessionPath();
     
     let browser;
     try {
