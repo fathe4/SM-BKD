@@ -15,6 +15,8 @@ export class LlmRendererService {
     postType?: string
   ): Promise<{ content: string; usage?: { prompt_tokens: number; completion_tokens: number; estimated_cost_usd: number } }> {
     const personality = persona.personality_json || {};
+    const task = intent.action === "COMMENT" ? "comment" : "post_generate";
+    const cfg = LlmProvider.getConfig(task);
 
     let systemPrompt = "";
     let userPromptContent: any = "";
@@ -56,10 +58,14 @@ Write a matching response to that specific post. Do not output any analysis, tho
       }
 
       if (imageUrl) {
-        userPromptContent = [
-          { type: "text", text: textContent },
-          { type: "image_url", image_url: { url: imageUrl } }
-        ];
+        if (cfg.provider === "openai") {
+          userPromptContent = [
+            { type: "text", text: textContent },
+            { type: "image_url", image_url: { url: imageUrl } }
+          ];
+        } else {
+          userPromptContent = `${textContent}\n\n[Image context: There is an image attached at ${imageUrl}. Since you cannot view the image directly, reply to the text content naturally and refer to the presence of the image if relevant.]`;
+        }
       } else {
         userPromptContent = textContent;
       }
@@ -121,9 +127,7 @@ RULES:
     }
 
     try {
-      const task = intent.action === "COMMENT" ? "comment" : "post_generate";
       const client = LlmProvider.for(task);
-      const cfg = LlmProvider.getConfig(task);
       logger.debug(`[LlmRenderer] renderContent task=${task} provider=${cfg.provider} model=${cfg.model}`);
 
       const response = await client.complete({
