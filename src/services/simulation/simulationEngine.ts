@@ -96,6 +96,22 @@ export class SimulationEngine {
         `);
 
       if (personas) {
+        // ── Global AI post-rate cap (anti-burst) ──────────────────────────────
+        // One cheap count per tick, reused for every persona below. Prevents all
+        // personas from deciding to POST at once once the hourly ceiling is hit.
+        const AI_MAX_POSTS_PER_HOUR = Number(process.env.AI_MAX_POSTS_PER_HOUR) || 15;
+        const { count: globalAiPostCount } = await supabaseAdmin!
+          .from("posts")
+          .select("id", { count: "exact", head: true })
+          .eq("is_ai_generated", true)
+          .gt("created_at", new Date(Date.now() - 60 * 60 * 1000).toISOString());
+        const aiPostsThisHour = globalAiPostCount || 0;
+        if (aiPostsThisHour >= AI_MAX_POSTS_PER_HOUR) {
+          logger.info(
+            `AI hourly post cap reached (${aiPostsThisHour}/${AI_MAX_POSTS_PER_HOUR}) — no new POST jobs enqueued this tick.`,
+          );
+        }
+
         for (const persona of personas) {
           const state = (persona.persona_states as any);
           const convProfile = (persona.persona_conversation_profiles as any);
@@ -146,7 +162,7 @@ export class SimulationEngine {
           const effectivePostCount = (state.today_post_count || 0) + (pendingPostJobs || 0);
           const remainingBudget = Math.max(0, budget - effectivePostCount);
 
-          if (remainingBudget > 0 && state.energy >= 0.4) {
+          if (remainingBudget > 0 && state.energy >= 0.4 && aiPostsThisHour < AI_MAX_POSTS_PER_HOUR) {
             // Fetch any pending post jobs to check their run_at times for cooldown calculation
             const { data: latestPendingJob } = await supabaseAdmin!
               .from("behavior_jobs")
@@ -290,6 +306,7 @@ export class SimulationEngine {
    */
   public static async processBehaviorQueue(): Promise<void> {
     let processedCount = 0;
+    let postsThisTick = 0; // shared across the 5 workers (POST sub-cap)
     const maxJobsPerTick = 15;
 
     const worker = async () => {
@@ -320,6 +337,27 @@ export class SimulationEngine {
         if (fetchError || !fullJob) {
           logger.error(`Error fetching claimed job details for job ${lockedJob.r_id}: ${fetchError?.message}`);
           continue;
+        }
+
+        // Per-tick POST sub-cap (anti-burst): if several paced POST jobs come due
+        // at once, defer the overflow ~30s so posts never clump into one minute.
+        // LIKE / COMMENT jobs are unaffected.
+        if (fullJob.action_type === "POST") {
+          const AI_MAX_POSTS_PER_TICK = Number(process.env.AI_MAX_POSTS_PER_TICK) || 3;
+          if (postsThisTick >= AI_MAX_POSTS_PER_TICK) {
+            await supabaseAdmin!
+              .from("behavior_jobs")
+              .update({
+                status: "pending",
+                run_at: new Date(Date.now() + 30_000).toISOString(),
+              })
+              .eq("id", fullJob.id);
+            logger.info(
+              `Per-tick POST cap (${AI_MAX_POSTS_PER_TICK}) reached — deferring POST job ${fullJob.id} ~30s.`,
+            );
+            continue;
+          }
+          postsThisTick++;
         }
 
         await this.processSingleJob(fullJob);

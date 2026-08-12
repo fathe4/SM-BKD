@@ -59,6 +59,36 @@ export class ContentEngineService {
      */
     static async generateAndPublishPost(personaId: string, postingProfileName: string, forcePostType?: string): Promise<void> {
         try {
+            // ── Global AI post-rate cap: publish-side backstop (anti-burst) ────────
+            // Primary: rolling 1-hour count from the DB (always enforced, so a
+            // pre-existing backlog can't over-drain). Secondary: an atomic Redis
+            // epoch-hour counter that closes the race across the 5 concurrent workers.
+            const AI_MAX_POSTS_PER_HOUR = Number(process.env.AI_MAX_POSTS_PER_HOUR) || 15;
+            const { count: recentAiPosts } = await supabaseAdmin!
+                .from("posts")
+                .select("id", { count: "exact", head: true })
+                .eq("is_ai_generated", true)
+                .gt("created_at", new Date(Date.now() - 60 * 60 * 1000).toISOString());
+            if ((recentAiPosts || 0) >= AI_MAX_POSTS_PER_HOUR) {
+                logger.info(
+                    `Hourly AI post cap (${AI_MAX_POSTS_PER_HOUR}) reached (${recentAiPosts} in last hour) — skipping publish for persona ${personaId}.`,
+                );
+                return;
+            }
+            if (redisService.isReady()) {
+                const client = redisService.getClient();
+                const bucket = Math.floor(Date.now() / 3_600_000); // epoch hour
+                const key = `ai:posts:hour:${bucket}`;
+                const attempts = await (client as any).incr(key);
+                if (attempts === 1) await (client as any).expire(key, 3600);
+                if (attempts > AI_MAX_POSTS_PER_HOUR) {
+                    logger.info(
+                        `Hourly AI post cap (${AI_MAX_POSTS_PER_HOUR}) reached (Redis race-guard) — skipping publish.`,
+                    );
+                    return;
+                }
+            }
+
             // 1. Fetch identity
             const { data: rawPersona } = await supabaseAdmin!
                 .from("persona_identities")

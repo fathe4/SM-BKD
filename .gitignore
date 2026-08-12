@@ -7,10 +7,16 @@ yarn.lock
 dist/
 build/
 
-# Environment variables
+# Environment variables & secrets (never commit)
 .env
-.env.local
-.env.*.local
+.env.*
+*.env
+.env.bak
+*.bak
+
+# Auth sessions / credentials
+src/scripts/twitter-session.json
+*-session.json
 
 # Logs
 logs/
