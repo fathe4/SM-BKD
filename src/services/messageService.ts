@@ -133,6 +133,41 @@ export class MessageService {
   );
 
   /**
+   * Mark multiple messages as read in a single batched update
+   * (replaces N sequential UPDATE+SELECT+UPDATE round trips)
+   */
+  static markMessagesAsReadBatch = asyncHandler(
+    async (messageIds: string[], userId: string, chatId: string): Promise<void> => {
+      if (messageIds.length === 0) return;
+
+      // Single UPDATE ... WHERE id IN (...)
+      const { error: messageError } = await supabaseAdmin!
+        .from("messages")
+        .update({ is_read: true })
+        .in("id", messageIds);
+
+      if (messageError) {
+        throw new AppError(messageError.message, 400);
+      }
+
+      // Update the reader's last-read pointer in one write (chatId comes
+      // from the event, no need to fetch any message row first)
+      const { error: participantError } = await supabaseAdmin!
+        .from("chat_participants")
+        .update({
+          last_read: new Date().toISOString(),
+        })
+        .eq("chat_id", chatId)
+        .eq("user_id", userId);
+
+      if (participantError) {
+        throw new AppError(participantError.message, 400);
+      }
+    },
+    "Failed to mark messages as read",
+  );
+
+  /**
    * Get messages for a chat with pagination
    */
   static getChatMessages = asyncHandler(

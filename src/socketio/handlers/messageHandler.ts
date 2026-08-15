@@ -56,7 +56,8 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
       // Convert media objects to strings (JSON stringify) if needed
       const mediaStrings = media ? media.map(item => JSON.stringify(item)) : [];
 
-      // Create message in database
+      // Create message in database (privacy lookup is Redis-cached; cache
+      // invalidation runs fire-and-forget inside the service)
       const message = await enhancedMessageService.createMessage({
         chat_id: chatId as UUID,
         sender_id: userId as UUID,
@@ -66,13 +67,17 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
 
       const newMsg = { ...message, sender };
 
+      // ---- Deliver FIRST: everything after this point must never delay
+      // ---- the recipient seeing the message.
+
       // Notify the sender (acknowledgement with the created message)
       socket.emit("message:sent", { message: newMsg });
 
       // Emit to the chat room (to everyone except sender)
       socket.to(chatId).emit("message:new", { message: newMsg });
 
-      // Notify all participants (except sender) with a lightweight chat update
+      // ---- Non-critical follow-up: sidebar patches for every participant.
+
       const participants = await messageService.getChatParticipants(chatId);
 
       const lastMessagePatch = {
@@ -90,7 +95,7 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
           // If the participant is not the sender, increment their unread count by 1 in the sidebar
           const patch = {
             ...lastMessagePatch,
-            ...(participant.id !== userId ? { incrementUnread: true } : {})
+            ...(participant.id !== userId ? { incrementUnread: true } : {}),
           };
           io.to(socketId).emit("chats:update", patch);
         });
@@ -111,28 +116,17 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
         ? messageIds
         : (messageId ? [messageId] : []);
 
-      if (idsToMark.length === 0) return;
+      if (idsToMark.length === 0 || !chatId) return;
 
-      // Update message read status in database
-      for (const id of idsToMark) {
-        await messageService.markMessageAsRead(id, userId);
-      }
+      // Single batched UPDATE instead of one UPDATE+SELECT+UPDATE per message
+      await messageService.markMessagesAsReadBatch(idsToMark, userId, chatId);
 
-      // Invalidate Redis chat list and summary caches for all participants
-      try {
-        const participants = await enhancedMessageService.getChatParticipants(chatId);
-        const keysToDelete = [
-          `chat:summary:${chatId}`,
-          `messages:recent:${chatId}`
-        ];
-        await redisService.delete(...keysToDelete);
-        for (const p of participants) {
-          await redisService.invalidateUserCaches(p.id);
-        }
-        logger.debug(`Invalidated Redis caches after message:read in chat ${chatId}`);
-      } catch (cacheErr: any) {
-        logger.error(`Error invalidating Redis cache on message read: ${cacheErr.message}`);
-      }
+      // Invalidate the reader's chat-list cache (fire-and-forget)
+      redisService.invalidateUserCaches(userId).catch(cacheErr => {
+        logger.error(
+          `Error invalidating Redis cache on message read: ${cacheErr}`
+        );
+      });
 
       // Notify all the reader's connected devices to set unread count to 0 for this chat
       const readerSocketIds = getUserSocketIds(userId);
@@ -151,7 +145,7 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
         return; // Message might have been deleted
       }
 
-      // Check recipient's privacy settings for read receipts
+      // Check recipient's privacy settings for read receipts (Redis-cached)
       const senderSettings =
         await PrivacySettingsService.getUserPrivacySettings(message.sender_id);
       const allowReadReceipts =
@@ -225,7 +219,6 @@ export function messageHandler(io: SocketIOServer, socket: Socket): void {
         await messageService.updateMessage(messageId, {
           content,
         });
-        console.log("message:edited", originalMessage.chat_id);
 
         // Notify the chat room about the edit
         io.to(originalMessage.chat_id).emit("message:edited", {

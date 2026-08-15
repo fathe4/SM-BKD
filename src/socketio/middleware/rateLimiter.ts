@@ -6,7 +6,10 @@ const rateLimits = new Map<string, { count: number; resetTime: number }>();
 
 // Rate limit settings
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
-const MAX_CONNECTIONS_PER_WINDOW = 5;
+// 5/min was too tight: every page navigation opens a socket handshake, and
+// users behind shared IPs (office/NAT) multiply this. 20/min still blocks
+// abusive reconnect loops.
+const MAX_CONNECTIONS_PER_WINDOW = 20;
 
 /**
  * Socket.IO middleware for rate limiting

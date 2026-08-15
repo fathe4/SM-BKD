@@ -12,6 +12,7 @@ import {
   MessageWithUser,
 } from "../models/chat.model";
 import { asyncHandler } from "../utils/asyncHandler";
+import { logger } from "../utils/logger";
 import { FriendshipService } from "./friendshipService";
 import { PrivacySettingsService } from "./privacySettingsService";
 import { ChatParticipantDetails } from "../types/models";
@@ -65,7 +66,6 @@ export class ChatService {
    * - Can be extended for participant hashes or multi-user direct chats if needed in the future.
    */
   static findDirectChat = async (userA: string, userB: string) => {
-    console.log(userA, userB);
 
     const { data, error } = await supabaseAdmin!.rpc("find_direct_chat", {
       user_a: userA,
@@ -168,8 +168,6 @@ export class ChatService {
         console.error(`Error invalidating user caches on chat create:`, cacheErr);
       }
 
-      console.log(chat, "chat");
-
       return { chat: chat as Chat, isDuplicate: false };
     },
     "Failed to create chat"
@@ -190,7 +188,6 @@ export class ChatService {
       // Check cache
       const cacheKey = `chat:${chatId}`;
       const cached = await redisService.get<Chat>(cacheKey);
-      console.log(cached, "cached");
 
       if (cached) return cached;
 
@@ -229,73 +226,115 @@ export class ChatService {
       // Try to get from Redis cache first
       const cachedResult = await redisService.getChatList(userId);
       if (cachedResult) {
-        console.log(
-          "✅ Cache hit: Returning cached chat list for user",
-          userId
-        );
         return cachedResult;
       }
 
-      console.log(
-        "❌ Cache miss: Fetching chat list from database for user",
-        userId
-      );
-
       const offset = (page - 1) * limit;
 
-      // Get chats where the user is a participant
-      const {
-        data: chatParticipations,
-        error: participationError,
-        count,
-      } = await supabase
+      // Single RPC round trip: chats + last message + unread count +
+      // participants + AI availability (replaces an N+1 that fired 4-6
+      // queries per chat). Requires chat-performance.sql migration.
+      const { data: rows, error: rpcError } = await supabase.rpc(
+        "get_user_chats",
+        { p_user_id: userId, p_limit: limit, p_offset: offset }
+      );
+
+      if (rpcError) {
+        throw new AppError(rpcError.message, 400);
+      }
+
+      // Cheap HEAD count for pagination (index: chat_participants(user_id))
+      const { count, error: countError } = await supabase
         .from("chat_participants")
-        .select("chat_id", { count: "exact" })
-        .eq("user_id", userId)
-        .range(offset, offset + limit - 1);
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId);
 
-      if (participationError) {
-        throw new AppError(participationError.message, 400);
+      if (countError) {
+        throw new AppError(countError.message, 400);
       }
 
-      if (!chatParticipations || chatParticipations.length === 0) {
-        return { chats: [], total: 0 };
-      }
+      // Apply participant privacy filtering in-process. Privacy settings are
+      // Redis-cached, so this adds no DB round trips in the common case.
+      const chats = await Promise.all(
+        (rows || []).map(async (row: any) => {
+          const participants = await Promise.all(
+            (row.participants || []).map(async (p: any) => {
+              if (p.id === userId) return p;
 
-      const chatIds = chatParticipations.map(p => p.chat_id);
+              const settings =
+                await PrivacySettingsService.getUserPrivacySettings(p.id);
+              const profileVisibility =
+                settings.settings.baseSettings.profileVisibility;
 
-      // Get chat details with last message
-      const chatSummaries = await Promise.all(
-        chatIds.map(async chatId => {
-          return await this.getChatSummary(chatId, userId);
+              if (profileVisibility === "private") {
+                return { ...p, profile_picture: null };
+              }
+
+              if (profileVisibility === "friends") {
+                const areFriends =
+                  await FriendshipService.checkIfUsersAreFriends(
+                    userId as UUID,
+                    p.id
+                  );
+                if (!areFriends) {
+                  return { ...p, profile_picture: null };
+                }
+              }
+
+              return p;
+            })
+          );
+
+          const chat = {
+            id: row.id,
+            created_at: row.created_at,
+            is_group_chat: row.is_group_chat,
+            name: row.name,
+            auto_delete_at: row.auto_delete_at,
+            is_deleted: row.is_deleted,
+            avatar: row.avatar,
+            description: row.description,
+            creator_id: row.creator_id,
+            context_type: row.context_type,
+            context_id: row.context_id,
+          };
+
+          return {
+            ...chat,
+            name: getChatName(chat, participants, userId),
+            is_group_chat: row.is_group_chat,
+            avatar: getChatAvatar(chat, participants, userId),
+            last_message: row.last_message
+              ? {
+                  id: row.last_message.id,
+                  content: row.last_message.content,
+                  sender_name: row.last_message.sender_name || "Unknown",
+                  created_at: new Date(row.last_message.created_at),
+                }
+              : undefined,
+            unread_count: Number(row.unread_count || 0),
+            participants,
+            availability: {
+              state: row.availability_state || "AVAILABLE",
+              until: row.availability_until || null,
+              reason: row.availability_reason || null,
+            },
+          } as ChatSummary;
         })
       );
 
-      // Sort by last message timestamp (most recent first)
-      chatSummaries.sort((a, b) => {
-        const dateA = a.last_message?.created_at
-          ? new Date(a.last_message.created_at)
-          : new Date(0);
-        const dateB = b.last_message?.created_at
-          ? new Date(b.last_message.created_at)
-          : new Date(0);
-        return dateB.getTime() - dateA.getTime();
-      });
-
       const result = {
-        chats: chatSummaries,
+        chats,
         total: count || 0,
       };
 
       // Cache the result
       try {
         await redisService.setChatList(userId, result.chats, result.total);
-        console.log("✅ Cached chat list for user", userId);
       } catch (error) {
-        console.log("❌ Failed to cache chat list:", error);
+        logger.warn(`Failed to cache chat list: ${error}`);
       }
 
-      console.log("get user chats" + new Date());
       return result;
     },
     "Failed to get user chats"
@@ -306,7 +345,6 @@ export class ChatService {
   //  */
   static getChatSummary = asyncHandler(
     async (chatId: string, userId: string): Promise<ChatSummary> => {
-      console.log("is it a chat header");
 
       // Get the chat details
       const { data: chat, error: chatError } = await supabase

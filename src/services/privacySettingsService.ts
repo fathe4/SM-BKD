@@ -4,6 +4,7 @@ import { UUID } from "crypto";
 import { supabase, supabaseAdmin } from "../config/supabase";
 import { AppError } from "../middlewares/errorHandler";
 import { logger } from "../utils/logger";
+import { redisService } from "./redis.service";
 import {
   ExtendedPrivacySettings,
   UserPrivacySettingsRecord,
@@ -11,14 +12,38 @@ import {
   UserPrivacySettingsUpdate,
 } from "../models/privacy-settings.model";
 
+// Cache TTL for privacy settings (they change rarely but are read on every message send)
+const PRIVACY_SETTINGS_TTL = 300; // 5 minutes
+
 export class PrivacySettingsService {
+  private static cacheKey(userId: UUID): string {
+    return `privacy:settings:${userId}`;
+  }
+
   /**
-   * Get a user's privacy settings
+   * Drop the cached privacy settings for a user (call after any write)
+   */
+  private static async invalidateCache(userId: UUID): Promise<void> {
+    try {
+      await redisService.delete(this.cacheKey(userId));
+    } catch {
+      // Cache invalidation is best-effort
+    }
+  }
+
+  /**
+   * Get a user's privacy settings (Redis-cached)
    */
   static async getUserPrivacySettings(
     userId: UUID,
   ): Promise<UserPrivacySettingsRecord> {
     try {
+      // Serve from cache when available — this sits on the message send hot path
+      const cached = await redisService.get<UserPrivacySettingsRecord>(
+        this.cacheKey(userId),
+      );
+      if (cached) return cached;
+
       // Attempt to fetch the user's privacy settings
       const { data, error } = await supabase
         .from("user_privacy_settings")
@@ -33,13 +58,25 @@ export class PrivacySettingsService {
 
       // If user has no privacy settings, create default settings
       if (!data) {
-        return await this.createUserPrivacySettings(
+        const created = await this.createUserPrivacySettings(
           userId,
           DEFAULT_EXTENDED_PRIVACY_SETTINGS,
         );
+        await redisService.set(
+          this.cacheKey(userId),
+          created,
+          PRIVACY_SETTINGS_TTL,
+        );
+        return created;
       }
 
-      return data as UserPrivacySettingsRecord;
+      const record = data as UserPrivacySettingsRecord;
+      await redisService.set(
+        this.cacheKey(userId),
+        record,
+        PRIVACY_SETTINGS_TTL,
+      );
+      return record;
     } catch (error) {
       logger.error("Error in getUserPrivacySettings:", error);
       throw error instanceof AppError
@@ -112,6 +149,8 @@ export class PrivacySettingsService {
         throw new AppError(error.message, 400);
       }
 
+      await this.invalidateCache(userId);
+
       return data as UserPrivacySettingsRecord;
     } catch (error) {
       logger.error("Error in updateUserPrivacySettings:", error);
@@ -160,6 +199,8 @@ export class PrivacySettingsService {
         throw new AppError(error.message, 400);
       }
 
+      await this.invalidateCache(userId);
+
       return data as UserPrivacySettingsRecord;
     } catch (error) {
       logger.error(`Error in updatePrivacySection (${section}):`, error);
@@ -191,6 +232,8 @@ export class PrivacySettingsService {
         throw new AppError(error.message, 400);
       }
 
+      await this.invalidateCache(userId);
+
       return data as UserPrivacySettingsRecord;
     } catch (error) {
       logger.error("Error in resetPrivacySettings:", error);
@@ -214,6 +257,8 @@ export class PrivacySettingsService {
         logger.error("Error deleting privacy settings:", error);
         throw new AppError(error.message, 400);
       }
+
+      await this.invalidateCache(userId);
     } catch (error) {
       logger.error("Error in deletePrivacySettings:", error);
       throw error instanceof AppError
