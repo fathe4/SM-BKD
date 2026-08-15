@@ -25,6 +25,7 @@ export class EnhancedMessageService {
       >
     ): Promise<Message> => {
       // Calculate auto_delete_at based on retention policy
+      // (Redis-cached lookup — this used to be an uncached DB SELECT on the hot path)
       const userSettings = await PrivacySettingsService.getUserPrivacySettings(
         messageData.sender_id
       );
@@ -53,21 +54,17 @@ export class EnhancedMessageService {
         throw new AppError(error.message, 400);
       }
 
-      // Invalidate chat caches on new message
-      try {
-        const participants = await EnhancedMessageService.getChatParticipants(data.chat_id);
-        const keysToDelete = [
-          `chat:summary:${data.chat_id}`,
-          `messages:recent:${data.chat_id}`
-        ];
-        await redisService.delete(...keysToDelete);
-        for (const p of participants) {
-          await redisService.invalidateUserCaches(p.id);
-        }
-        logger.debug(`Invalidated Redis chat caches for chat ${data.chat_id}`);
-      } catch (cacheErr: any) {
-        logger.error(`Error invalidating Redis chat cache: ${cacheErr.message}`);
-      }
+      // Everything below is off the critical path — the caller emits the
+      // message to participants as soon as this function returns.
+
+      // Invalidate participants' chat-list caches (fire-and-forget)
+      EnhancedMessageService.invalidateChatCachesAfterMessage(
+        data.chat_id
+      ).catch(cacheErr => {
+        logger.error(
+          `Error invalidating Redis chat cache: ${(cacheErr as any).message}`
+        );
+      });
 
       // Hook to advance relationship stages asynchronously
       EnhancedMessageService.hookAdvanceRelationship(data.chat_id, data.sender_id).catch(err => {
@@ -78,6 +75,19 @@ export class EnhancedMessageService {
     },
     "Failed to create message"
   );
+
+  /**
+   * Invalidate chat-list caches for all participants after a new message.
+   * Always invoked fire-and-forget — must never block message delivery.
+   */
+  private static async invalidateChatCachesAfterMessage(
+    chatId: string
+  ): Promise<void> {
+    const participants = await EnhancedMessageService.getChatParticipants(chatId);
+    await Promise.all(
+      participants.map(p => redisService.invalidateUserCaches(p.id))
+    );
+  }
 
   /**
    * Hook to check chat participants and advance relationship stage if it is an AI <-> Human direct chat.
@@ -277,8 +287,6 @@ export class EnhancedMessageService {
       const unreadMessages = (data as Message[]).filter(
         msg => !msg.is_read && msg.sender_id !== userId
       );
-
-      console.log(data, "messages");
 
       // Process read statuses in the background (non-blocking)
       if (unreadMessages.length > 0) {

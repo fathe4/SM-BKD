@@ -3,6 +3,7 @@ import { logger } from "../../utils/logger";
 import { PrivacySettingsService } from "../../services/privacySettingsService";
 import { getUserSocketIds } from "./connectionHandler";
 import { enhancedMessageService } from "../../services/enhancedMessageService";
+import { messageService } from "../../services/messageService";
 
 /**
  * Handle read receipt-specific functionality
@@ -19,59 +20,49 @@ export function readReceiptHandler(io: SocketIOServer, socket: Socket): void {
     "messages:readBatch",
     async (data: { chatId: string; messageIds: string[] }) => {
       try {
-        console.log("Received readBatch event:", data);
-
         const { chatId, messageIds } = data;
 
-        if (!Array.isArray(messageIds) || messageIds.length === 0) {
+        if (!chatId || !Array.isArray(messageIds) || messageIds.length === 0) {
           return;
         }
 
-        // Process each message
-        const results = await Promise.all(
+        // Single batched UPDATE + last_read write (was: one
+        // UPDATE+SELECT+UPDATE chain per message)
+        await messageService.markMessagesAsReadBatch(
+          messageIds,
+          userId,
+          chatId,
+        );
+
+        // Reset the reader's unread badge on all their devices
+        // (this was missing — the sidebar badge never reset in real-time)
+        getUserSocketIds(userId).forEach((socketId) => {
+          io.to(socketId).emit("chats:update", { chatId, unreadCount: 0 });
+        });
+
+        // Fetch the affected messages once for sender notifications
+        const messages = await Promise.all(
           messageIds.map(async (messageId) => {
             try {
-              // Mark as read in database
-              const { readReceiptSent, message } =
-                await enhancedMessageService.markMessageAsRead(
-                  messageId,
-                  userId,
-                );
-              console.log(readReceiptSent, message);
-
-              // Get the message to find sender
-              //   const message = await messageService.getMessageById(messageId);
-
-              if (!message) {
-                return { messageId, success: false, reason: "not_found" };
-              }
-
-              return { messageId, success: true, message, readReceiptSent };
-            } catch (error) {
-              logger.error(
-                `Error marking message ${messageId} as read:`,
-                error,
-              );
-              return { messageId, success: false, reason: "error" };
+              return await messageService.getMessageById(messageId);
+            } catch {
+              return null;
             }
           }),
         );
 
-        // Get all unique senders from the successful results
+        // Get all unique senders from the fetched messages
         const senders = new Map();
-        results
-          .filter((r) => r.success && r.message)
-          .forEach((result) => {
-            const message = result.message;
-            if (message && message.sender_id !== userId) {
-              // Don't notify self
-              senders.set(message.sender_id, true);
-            }
-          });
+        messages.forEach((message) => {
+          if (message && message.sender_id !== userId) {
+            // Don't notify self
+            senders.set(message.sender_id, true);
+          }
+        });
 
         // Notify each sender about their messages being read
         for (const senderId of senders.keys()) {
-          // Check if this sender allows read receipts
+          // Check if this sender allows read receipts (Redis-cached)
           const senderSettings =
             await PrivacySettingsService.getUserPrivacySettings(senderId);
           const allowReadReceipts =
@@ -89,14 +80,9 @@ export function readReceiptHandler(io: SocketIOServer, socket: Socket): void {
                   chatId,
                   readBy: userId,
                   timestamp: new Date(),
-                  messageIds: results
-                    .filter(
-                      (r) =>
-                        r.success &&
-                        r.message &&
-                        r.message.sender_id === senderId,
-                    )
-                    .map((r) => r.messageId),
+                  messageIds: messages
+                    .filter((m) => m && m.sender_id === senderId)
+                    .map((m) => m!.id),
                 });
               });
             }

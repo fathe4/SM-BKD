@@ -88,8 +88,10 @@ class RedisService {
     //   },
     // };
 
+    // Only enable TLS for rediss:// URLs so a local plain Redis also works
+    const useTls = redisUrl.startsWith("rediss://");
     this.client = new Redis(redisUrl, {
-      tls: {},
+      ...(useTls ? { tls: {} } : {}),
       retryStrategy: times => Math.min(times * 50, 2000),
     });
 
@@ -279,14 +281,28 @@ class RedisService {
 
   /**
    * Delete keys matching a pattern
+   * Uses SCAN (cursor-based) instead of KEYS to avoid blocking the Redis server
    */
   async deletePattern(pattern: string): Promise<number> {
     if (!this.isReady()) return 0;
 
     try {
-      const keys = await this.client!.keys(pattern);
-      if (keys.length === 0) return 0;
-      return await this.client!.del(...keys);
+      let cursor = "0";
+      const keysToDelete: string[] = [];
+      do {
+        const [nextCursor, keys] = await this.client!.scan(
+          cursor,
+          "MATCH",
+          pattern,
+          "COUNT",
+          200
+        );
+        cursor = nextCursor;
+        if (keys.length > 0) keysToDelete.push(...keys);
+      } while (cursor !== "0");
+
+      if (keysToDelete.length === 0) return 0;
+      return await this.client!.del(...keysToDelete);
     } catch (error) {
       console.error(`Redis DELETE pattern error for ${pattern}:`, error);
       return 0;
@@ -297,7 +313,20 @@ class RedisService {
   async scanKeys(pattern: string): Promise<string[]> {
     if (!this.isReady()) return [];
     try {
-      return await this.client!.keys(pattern);
+      let cursor = "0";
+      const matched: string[] = [];
+      do {
+        const [nextCursor, keys] = await this.client!.scan(
+          cursor,
+          "MATCH",
+          pattern,
+          "COUNT",
+          200
+        );
+        cursor = nextCursor;
+        if (keys.length > 0) matched.push(...keys);
+      } while (cursor !== "0");
+      return matched;
     } catch {
       return [];
     }
@@ -633,11 +662,14 @@ class RedisService {
 
   /**
    * Invalidate all caches for a user
+   * Exact keys are deleted directly; only the unread pattern needs a scan
    */
   async invalidateUserCaches(userId: string): Promise<void> {
-    await this.deletePattern(`chat:list:${userId}*`);
+    await this.delete(
+      this.keys.chatList(userId),
+      this.keys.userChatsTotal(userId)
+    );
     await this.deletePattern(`unread:${userId}:*`);
-    await this.deletePattern(`chat:total:${userId}`);
   }
 
   /**

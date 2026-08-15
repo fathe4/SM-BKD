@@ -2,6 +2,7 @@ import express, { Application, Request, Response } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
+import compression from "compression";
 import http from "http";
 import { config } from "dotenv";
 import { errorHandler } from "./middlewares/errorHandler";
@@ -86,7 +87,12 @@ app.use(
 app.use(`${apiPrefix}/payments`, paymentRoutes);
 app.use(express.json()); // Parse JSON request bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded request bodies
-app.use(morgan("dev", { stream: morganStream })); // Request logging
+app.use(compression()); // gzip REST responses (chat lists, message pages)
+app.use(
+  process.env.NODE_ENV === "production"
+    ? morgan("tiny", { stream: morganStream }) // minimal prod logging
+    : morgan("dev", { stream: morganStream }) // verbose dev logging
+);
 app.use("/debug", debugRoutes);
 
 // Health check route

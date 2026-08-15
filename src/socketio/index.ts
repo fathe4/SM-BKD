@@ -8,7 +8,6 @@ import { chatHandler } from "./handlers/chatHandler"; // Import the new chat han
 import { socketAuthMiddleware } from "./middleware/authenticate";
 import { rateLimiterMiddleware } from "./middleware/rateLimiter";
 import { readReceiptHandler } from "./handlers/readReceiptHandler";
-import { SocketChatPrivacyMiddleware } from "./middleware/chatPrivacyMiddleware";
 
 // Socket.IO server instance
 let io: SocketIOServer | null = null;
@@ -56,7 +55,10 @@ export function initializeSocketIO(httpServer: HttpServer): SocketIOServer {
   // Apply global middleware
   socketServer.use(socketAuthMiddleware);
   socketServer.use(rateLimiterMiddleware);
-  socketServer.use(SocketChatPrivacyMiddleware.canAddParticipantsMiddleware);
+  // NOTE: SocketChatPrivacyMiddleware.canAddParticipantsMiddleware removed —
+  // it monkey-patched socket.emit on every connection to validate an event
+  // ("chat:addParticipants") that is never emitted anywhere in the codebase,
+  // adding per-emit overhead with no effect.
 
   // Set up connection event
   socketServer.on("connection", (socket: Socket) => {

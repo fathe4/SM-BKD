@@ -32,6 +32,7 @@ export class MessageController {
       const autoDeleteAt = res.locals.messageAutoDeleteAt;
 
       // Create the message with privacy settings applied
+      // (privacy lookup is Redis-cached; cache invalidation is fire-and-forget)
       const message = await enhancedMessageService.createMessage({
         chat_id: chatId as UUID,
         sender_id: userId,
@@ -39,26 +40,40 @@ export class MessageController {
         media,
       });
 
-      // Get sender profile details
-      const { data: senderUser } = await supabase
-        .from("users")
-        .select("id, username, first_name, last_name, profile_picture")
-        .eq("id", userId)
-        .single();
+      // Respond as soon as the message is persisted — the socket broadcast
+      // below must not delay the HTTP response.
+      res.status(201).json({
+        status: "success",
+        data: {
+          message,
+          expiresAt: autoDeleteAt,
+        },
+      });
 
-      const sender = {
-        id: userId,
-        username: senderUser?.username || "user",
-        first_name: senderUser?.first_name || "",
-        last_name: senderUser?.last_name || "",
-        profile_picture: senderUser?.profile_picture || null,
-      };
+      // Notify other participants via Socket.IO (non-blocking)
+      void (async () => {
+        try {
+          const io = getIO();
+          if (!io) return;
 
-      // Notify other participants via Socket.IO
-      try {
-        const io = getIO();
-        if (io) {
-          const participants = await messageService.getChatParticipants(chatId);
+          const [participants, senderUserResult] = await Promise.all([
+            messageService.getChatParticipants(chatId),
+            supabase
+              .from("users")
+              .select("id, username, first_name, last_name, profile_picture")
+              .eq("id", userId)
+              .single(),
+          ]);
+
+          const senderUser = senderUserResult.data;
+          const sender = {
+            id: userId,
+            username: senderUser?.username || "user",
+            first_name: senderUser?.first_name || "",
+            last_name: senderUser?.last_name || "",
+            profile_picture: senderUser?.profile_picture || null,
+          };
+
           const payload = { ...message, sender };
 
           const lastMessagePatch = {
@@ -82,18 +97,13 @@ export class MessageController {
               io.to(sid).emit("chats:update", lastMessagePatch);
             });
           }
+        } catch (socketErr: any) {
+          console.error(
+            "Error broadcasting REST message via socket:",
+            socketErr
+          );
         }
-      } catch (socketErr: any) {
-        console.error("Error broadcasting REST message via socket:", socketErr);
-      }
-
-      res.status(201).json({
-        status: "success",
-        data: {
-          message,
-          expiresAt: autoDeleteAt,
-        },
-      });
+      })();
     },
   );
 
