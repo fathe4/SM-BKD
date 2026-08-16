@@ -185,7 +185,9 @@ export class ScraperService {
         args: [
           "--no-sandbox",
           "--disable-setuid-sandbox",
-          "--disable-blink-features=AutomationControlled"
+          "--disable-blink-features=AutomationControlled",
+          "--disable-dev-shm-usage",
+          "--disable-gpu"
         ]
       });
 
@@ -382,7 +384,9 @@ export class ScraperService {
         args: [
           "--no-sandbox",
           "--disable-setuid-sandbox",
-          "--disable-blink-features=AutomationControlled"
+          "--disable-blink-features=AutomationControlled",
+          "--disable-dev-shm-usage",
+          "--disable-gpu"
         ]
       });
 
@@ -567,7 +571,9 @@ export class ScraperService {
         args: [
           "--no-sandbox",
           "--disable-setuid-sandbox",
-          "--disable-blink-features=AutomationControlled"
+          "--disable-blink-features=AutomationControlled",
+          "--disable-dev-shm-usage",
+          "--disable-gpu"
         ]
       });
 
