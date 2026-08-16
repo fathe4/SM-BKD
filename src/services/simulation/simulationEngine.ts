@@ -224,12 +224,17 @@ export class SimulationEngine {
             let baseTime = Date.now();
             if (latestPostJob && latestPostJob.run_at) {
               const latestRunAt = new Date(latestPostJob.run_at).getTime();
-              if (latestRunAt > baseTime) {
+              // Space out from the queue tail ONLY when it is near. With many
+              // personas, chaining 1-5min after the latest job forever makes
+              // the tail snowball hours into the future and posting stalls
+              // completely — cap the lead at 15 minutes.
+              const maxLeadMs = 15 * 60 * 1000;
+              if (latestRunAt > baseTime && latestRunAt < baseTime + maxLeadMs) {
                 baseTime = latestRunAt;
               }
             }
 
-            // Space posts out: next post runs 1 to 5 minutes after the last scheduled one
+            // Space posts out: next post runs 1 to 5 minutes after the base
             const spacingMinutes = Math.floor(Math.random() * 5) + 1;
             const runAt = new Date(baseTime + spacingMinutes * 60000).toISOString();
 
