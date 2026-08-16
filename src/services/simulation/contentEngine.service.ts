@@ -79,11 +79,14 @@ export class ContentEngineService {
                 const client = redisService.getClient();
                 const bucket = Math.floor(Date.now() / 3_600_000); // epoch hour
                 const key = `ai:posts:hour:${bucket}`;
-                const attempts = await (client as any).incr(key);
-                if (attempts === 1) await (client as any).expire(key, 3600);
-                if (attempts > AI_MAX_POSTS_PER_HOUR) {
+                // Read WITHOUT incrementing — this counter must track actual
+                // publishes only. Incrementing on every invocation silently
+                // vetoed all posting once total ATTEMPTS exceeded the cap
+                // (observed in production: 269 processed POST jobs -> 1 post).
+                const published = Number(await (client as any).get(key)) || 0;
+                if (published >= AI_MAX_POSTS_PER_HOUR) {
                     logger.info(
-                        `Hourly AI post cap (${AI_MAX_POSTS_PER_HOUR}) reached (Redis race-guard) — skipping publish.`,
+                        `Hourly AI post cap (${AI_MAX_POSTS_PER_HOUR}) reached (${published} published this hour) — skipping publish.`,
                     );
                     return;
                 }
@@ -486,6 +489,22 @@ export class ContentEngineService {
                             content = rendered;
                             chosenCandidate = cand;
                             logger.info(`@${persona.username} accepted and successfully published candidate: "${cand.title}"`);
+
+                            // Count the REAL publish in the Redis hourly
+                            // race-guard counter — only successful posts
+                            // increment it (see the pre-check above)
+                            if (redisService.isReady()) {
+                                try {
+                                    const client = redisService.getClient();
+                                    const bucket = Math.floor(Date.now() / 3_600_000);
+                                    const key = `ai:posts:hour:${bucket}`;
+                                    const published = await (client as any).incr(key);
+                                    if (published === 1) await (client as any).expire(key, 3600);
+                                } catch {
+                                    // counter is best-effort
+                                }
+                            }
+
                             break; // Found and published successfully! Exit loop.
 
                         } catch (postErr: any) {
