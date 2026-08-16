@@ -13,7 +13,11 @@ const TWITTER_LOGIN = "https://x.com/i/flow/login";
 const ANTI_BOT_ARGS = [
   "--no-sandbox",
   "--disable-setuid-sandbox",
-  "--disable-blink-features=AutomationControlled"
+  "--disable-blink-features=AutomationControlled",
+  // Server-friendly flags: VPS containers have tiny /dev/shm and no GPU —
+  // without these, headless Chrome hangs on a blank page forever
+  "--disable-dev-shm-usage",
+  "--disable-gpu"
 ];
 
 export type SessionStatus = "valid" | "expired" | "no-session" | "error";
