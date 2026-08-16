@@ -146,19 +146,40 @@ export class TwitterSessionService {
       context = await this.createContext(browser);
       const page = await context.newPage();
 
-      await page.goto(TWITTER_HOME, { waitUntil: "commit", timeout: 30000 });
-      // Give the SPA time to settle or redirect to the login flow
-      await page.waitForTimeout(5000);
+      await page.goto(TWITTER_HOME, { waitUntil: "commit", timeout: 45000 });
 
-      if (await this.detectLoginWall(page)) {
+      // Poll for POSITIVE evidence either way — slow networks (VPS) can take
+      // a while to hydrate the SPA, and an empty page must not be mistaken
+      // for a login wall (expired) or a logged-in page (valid).
+      const verdictDeadline = Date.now() + 25000;
+      let sawLoggedIn = false;
+      let sawLoginWall = false;
+      while (Date.now() < verdictDeadline && !sawLoggedIn && !sawLoginWall) {
+        sawLoggedIn = !!(await page.$('[data-testid="SideNav_AccountSwitcher_Button"]').catch(() => null));
+        if (!sawLoggedIn) {
+          sawLoginWall =
+            page.url().includes("/login") ||
+            !!(await page.$('[data-testid="loginButton"], input[autocomplete="username"]').catch(() => null));
+        }
+        if (!sawLoggedIn && !sawLoginWall) {
+          await page.waitForTimeout(2000);
+        }
+      }
+
+      if (sawLoggedIn) {
+        // Session is alive — write rotated cookies back to disk
+        await this.persistState(context);
+        logger.info("Twitter session is valid (rotated cookies persisted).");
+        return "valid";
+      }
+      if (sawLoginWall) {
         logger.error("TWITTER_SESSION_EXPIRED: saved session is no longer authenticated.");
         return "expired";
       }
-
-      // Session is alive — write rotated cookies back to disk
-      await this.persistState(context);
-      logger.info("Twitter session is valid (rotated cookies persisted).");
-      return "valid";
+      logger.error(
+        `Twitter session validation inconclusive (page never fully rendered; url: ${page.url()})`
+      );
+      return "error";
     } catch (e: any) {
       logger.error(`Twitter session validation failed: ${e.message}`);
       return "error";
@@ -453,13 +474,23 @@ export class TwitterSessionService {
         return false;
       }
 
-      await page.goto("https://x.com/", { waitUntil: "domcontentloaded", timeout: 45000 });
-      await page.waitForTimeout(3000);
+      await page.goto("https://x.com/", { waitUntil: "domcontentloaded", timeout: 60000 });
 
-      // Open the login form if the homepage doesn't show it directly
+      // Poll for the login form for up to 30s — slow networks (VPS) can take
+      // much longer to hydrate the SPA than a desktop connection
+      const formDeadline = Date.now() + 30000;
+      while (Date.now() < formDeadline && !(await this.anyUsernameInputVisible(page))) {
+        // opportunistically open the Sign-in modal if the homepage shows it
+        await this.clickElementByText(page, ["Sign in"]).catch(() => undefined);
+        await page.waitForTimeout(2000);
+      }
       if (!(await this.anyUsernameInputVisible(page))) {
-        await this.clickElementByText(page, ["Sign in"]);
-        await page.waitForTimeout(3000);
+        const state = await page!
+          .evaluate(() => ({ ready: document.readyState, bodyLen: (document.body.innerText || "").length, url: location.href }))
+          .catch(() => ({ ready: "?", bodyLen: 0, url: page!.url() }));
+        throw new Error(
+          `login form never appeared (readyState: ${state.ready}, bodyTextLength: ${state.bodyLen}, url: ${state.url})`
+        );
       }
 
       // "Continue with Google" — a div[role=button] with localized text, so
