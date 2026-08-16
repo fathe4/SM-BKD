@@ -41,10 +41,15 @@ import { AiConversationStateService } from "./services/simulation/aiConversation
 // Load environment variables
 config();
 
+// Boot milestone logger — raw console.log with timestamps, immune to the
+// winston info filter, so a hung boot announces its last completed step
+const bootLog = (step: string) =>
+  console.log(`[boot ${new Date().toISOString()}] ${step}`);
+
 // Initialize Redis connection
 try {
   redisService.initialize();
-  logger.info("✅ Redis service initialized successfully");
+  bootLog("redis initialize() returned");
 } catch (error) {
   logger.error("❌ Failed to initialize Redis service:", error);
 }
@@ -59,6 +64,7 @@ const apiPrefix = process.env.API_PREFIX || "/api/v1";
 
 // Initialize Socket.IO on the same server
 initializeSocketIO(server);
+bootLog("socket.io initialized");
 
 const corsOptions = {
   origin: [
@@ -124,18 +130,23 @@ app.get("/health", async (req: Request, res: Response) => {
 
 // Initialize the message retention job when server starts
 setupMessageRetentionJob();
+bootLog("message retention job scheduled");
 
 // Initialize the subscription status job when server starts
 setupSubscriptionStatusJob();
+bootLog("subscription status job scheduled");
 
 // Initialize the AI Engagement job when server starts
 setupAiEngagementJob();
+bootLog("AI engagement job scheduled");
 
 // Initialize the AI Behavior Planner when server starts
 BehaviorPlannerService.init();
+bootLog("behavior planner initialized");
 
 // Initialize the AI Presence Service when server starts
 AiPresenceService.init();
+bootLog("AI presence service initialized");
 
 // API routes
 app.use(`${apiPrefix}/auth`, authRoutes);
@@ -209,7 +220,9 @@ app.use((req, _res, next) => {
 
 // Start the server ONLY ONCE - using the HTTP server that has Socket.IO attached
 if (process.env.NODE_ENV !== "test") {
+  bootLog("calling server.listen()");
   server.listen(port, () => {
+    bootLog(`LISTENING on port ${port} — boot complete`);
     logger.info(
       `🚀 Server running on port ${port} in ${
         process.env.NODE_ENV || "development"
