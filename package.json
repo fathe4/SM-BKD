@@ -19,6 +19,9 @@
     "test:feed:ci": "jest tests/feed.test.ts --ci --coverage --maxWorkers=2",
     "test:mocha": "mocha -r ts-node/register 'tests/**/*.test.ts'",
     "db:setup": "ts-node src/scripts/setupDatabase.ts",
+    "twitter:refresh": "ts-node src/scripts/twitterSessionManager.ts refresh",
+    "twitter:check": "ts-node src/scripts/twitterSessionManager.ts check",
+    "twitter:google-setup": "ts-node src/scripts/twitterSessionManager.ts google-setup",
     "seed": "ts-node src/scripts/seed.ts",
     "migrate:privacy-settings": "ts-node src/scripts/migrations/addUserPrivacySettingsTable.ts"
   },

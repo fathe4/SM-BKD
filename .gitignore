@@ -60,3 +60,9 @@ Thumbs.db
 tmp/
 temp/
 .vercel
+
+# Twitter session artifacts (live credentials — never commit)
+src/scripts/twitter-login-profile/
+src/scripts/twitter-session.*.json
+src/scripts/twitter-*-failure-*.png
+src/scripts/twitter-feed-screenshot.png

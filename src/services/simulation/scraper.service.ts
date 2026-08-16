@@ -5,6 +5,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { REDDIT_SUBREDDITS, getSubredditName } from "../../config/redditSimulationConfig";
 import { LlmRendererService } from "./llmRenderer.service";
+import { TwitterSessionService } from "./twitterSession.service";
 
 export interface ScrapedPost {
   title: string;
@@ -32,22 +33,8 @@ export interface TwitterScrapedPost {
 
 export class ScraperService {
   private static isScraping: boolean = false;
-
-  private static getTwitterSessionPath(): string {
-    const cwdPath = path.join(process.cwd(), "src/scripts/twitter-session.json");
-    if (fs.existsSync(cwdPath)) {
-      return cwdPath;
-    }
-    const relativePath = path.resolve(__dirname, "../../scripts/twitter-session.json");
-    if (fs.existsSync(relativePath)) {
-      return relativePath;
-    }
-    const cwdDistPath = path.join(process.cwd(), "dist/scripts/twitter-session.json");
-    if (fs.existsSync(cwdDistPath)) {
-      return cwdDistPath;
-    }
-    return relativePath;
-  }
+  /** Circuit breaker: set when any scrape hits a login wall so the pipeline can stop early. */
+  private static sessionExpiredDetected: boolean = false;
 
   /**
    * Scrape posts from a subreddit using Playwright Chromium
@@ -189,8 +176,9 @@ export class ScraperService {
    */
   public static async scrapeTwitterProfile(profile: string, limit: number = 10): Promise<TwitterScrapedPost[]> {
     logger.info(`Starting Playwright scraping for Twitter profile @${profile}...`);
-    const sessionPath = this.getTwitterSessionPath();
     let browser;
+    let context;
+    let sessionExpired = false;
     try {
       browser = await chromium.launch({
         headless: true,
@@ -201,18 +189,7 @@ export class ScraperService {
         ]
       });
 
-      const hasSession = fs.existsSync(sessionPath);
-      const context = await browser.newContext({
-        storageState: hasSession ? sessionPath : undefined,
-        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        viewport: { width: 1280, height: 1024 }
-      });
-
-      await context.addInitScript(() => {
-        Object.defineProperty(navigator, 'webdriver', {
-          get: () => undefined
-        });
-      });
+      context = await TwitterSessionService.createContext(browser);
 
       const page = await context.newPage();
 
@@ -234,6 +211,15 @@ export class ScraperService {
 
       // Wait 8 seconds for elements to render
       await page.waitForTimeout(8000);
+
+      // Detect a dead session early instead of silently scraping 0 tweets as "success"
+      if (await TwitterSessionService.detectLoginWall(page)) {
+        sessionExpired = true;
+        this.sessionExpiredDetected = true;
+        logger.error(`TWITTER_SESSION_EXPIRED: login wall hit while scraping @${profile}. Triggering session recovery...`);
+        await TwitterSessionService.ensureSession();
+        return [];
+      }
 
       // Human-like scrolling & delay
       const waitTime = 3000 + Math.floor(Math.random() * 2000);
@@ -361,6 +347,10 @@ export class ScraperService {
       logger.error(`Error in scrapeTwitterProfile for @${profile}: ${err.message}`);
       return [];
     } finally {
+      // Persist rotated cookies (ct0 etc.) back to disk so the session stays fresh
+      if (context && !sessionExpired) {
+        await TwitterSessionService.persistState(context);
+      }
       if (browser) {
         await browser.close();
       }
@@ -372,13 +362,20 @@ export class ScraperService {
    */
   public static async scrapeTwitterPersonalFeed(limit: number = 15): Promise<TwitterScrapedPost[]> {
     logger.info("Starting Playwright scraping for Twitter home feed...");
-    const sessionPath = this.getTwitterSessionPath();
+    const sessionPath = TwitterSessionService.getSessionPath();
     if (!fs.existsSync(sessionPath)) {
-      logger.warn("No saved Twitter session found! Cannot scrape feed.");
-      return [];
+      logger.warn("No saved Twitter session found! Attempting to acquire one dynamically...");
+      await TwitterSessionService.ensureSession();
+      if (!fs.existsSync(TwitterSessionService.getSessionPath())) {
+        logger.error("TWITTER_SESSION_EXPIRED: could not acquire a Twitter session. Aborting feed scrape.");
+        this.sessionExpiredDetected = true;
+        return [];
+      }
     }
 
     let browser;
+    let context;
+    let sessionExpired = false;
     try {
       browser = await chromium.launch({
         headless: true,
@@ -389,17 +386,7 @@ export class ScraperService {
         ]
       });
 
-      const context = await browser.newContext({
-        storageState: sessionPath,
-        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        viewport: { width: 1280, height: 1024 }
-      });
-
-      await context.addInitScript(() => {
-        Object.defineProperty(navigator, 'webdriver', {
-          get: () => undefined
-        });
-      });
+      context = await TwitterSessionService.createContext(browser);
 
       const page = await context.newPage();
 
@@ -419,6 +406,15 @@ export class ScraperService {
 
       // Wait 8 seconds for feed items to render
       await page.waitForTimeout(8000);
+
+      // Detect a dead session early instead of silently scraping 0 tweets as "success"
+      if (await TwitterSessionService.detectLoginWall(page)) {
+        sessionExpired = true;
+        this.sessionExpiredDetected = true;
+        logger.error("TWITTER_SESSION_EXPIRED: login wall hit on the home feed. Triggering session recovery...");
+        await TwitterSessionService.ensureSession();
+        return [];
+      }
 
       // Human-like scrolling & delay
       for (let i = 0; i < 3; i++) {
@@ -546,6 +542,10 @@ export class ScraperService {
       logger.error(`Error in scrapeTwitterPersonalFeed: ${err.message}`);
       return [];
     } finally {
+      // Persist rotated cookies (ct0 etc.) back to disk so the session stays fresh
+      if (context && !sessionExpired) {
+        await TwitterSessionService.persistState(context);
+      }
       if (browser) {
         await browser.close();
       }
@@ -557,9 +557,10 @@ export class ScraperService {
    */
   public static async scrapeTwitterSearch(topic: string, limit: number = 15): Promise<TwitterScrapedPost[]> {
     logger.info(`Starting Playwright scraping for Twitter search topic: "${topic}"...`);
-    const sessionPath = this.getTwitterSessionPath();
-    
+
     let browser;
+    let context;
+    let sessionExpired = false;
     try {
       browser = await chromium.launch({
         headless: true,
@@ -570,18 +571,7 @@ export class ScraperService {
         ]
       });
 
-      const hasSession = fs.existsSync(sessionPath);
-      const context = await browser.newContext({
-        storageState: hasSession ? sessionPath : undefined,
-        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        viewport: { width: 1280, height: 1024 }
-      });
-
-      await context.addInitScript(() => {
-        Object.defineProperty(navigator, 'webdriver', {
-          get: () => undefined
-        });
-      });
+      context = await TwitterSessionService.createContext(browser);
 
       const page = await context.newPage();
 
@@ -603,6 +593,15 @@ export class ScraperService {
 
       // Wait 8 seconds for search results to render
       await page.waitForTimeout(8000);
+
+      // Detect a dead session early instead of silently scraping 0 tweets as "success"
+      if (await TwitterSessionService.detectLoginWall(page)) {
+        sessionExpired = true;
+        this.sessionExpiredDetected = true;
+        logger.error(`TWITTER_SESSION_EXPIRED: login wall hit while searching "${topic}". Triggering session recovery...`);
+        await TwitterSessionService.ensureSession();
+        return [];
+      }
 
       // Human-like scrolling & delay
       for (let i = 0; i < 3; i++) {
@@ -730,6 +729,10 @@ export class ScraperService {
       logger.error(`Error in scrapeTwitterSearch for "${topic}": ${err.message}`);
       return [];
     } finally {
+      // Persist rotated cookies (ct0 etc.) back to disk so the session stays fresh
+      if (context && !sessionExpired) {
+        await TwitterSessionService.persistState(context);
+      }
       if (browser) {
         await browser.close();
       }
@@ -752,12 +755,25 @@ export class ScraperService {
       logger.info("Starting Playwright Scraper Pipeline...");
       let totalIngested = 0;
 
+      // 0. Ensure a valid Twitter session (refreshes it dynamically when expired)
+      this.sessionExpiredDetected = false;
+      const sessionOk = await TwitterSessionService.ensureSession();
+      if (!sessionOk) {
+        logger.error("TWITTER_SESSION_EXPIRED: no valid Twitter session available. Aborting scraper pipeline. Run \"npm run twitter:refresh\" to fix.");
+        return 0;
+      }
+
     // 1. Reddit scraping — DISABLED (Twitter only mode)
     logger.info("Reddit scraping is disabled. Skipping Reddit loop.");
 
     // 2. Scrape Twitter profiles
     logger.info("Executing Twitter scraping loop...");
     for (const profile of twitterProfiles) {
+      // Circuit breaker: stop hammering X once a dead session is detected
+      if (this.sessionExpiredDetected) {
+        logger.warn("Twitter session expired mid-pipeline — skipping remaining profiles.");
+        break;
+      }
       const posts = await this.scrapeTwitterProfile(profile, 5);
 
       for (const post of posts) {
