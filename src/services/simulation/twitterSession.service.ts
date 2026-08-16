@@ -475,6 +475,20 @@ export class TwitterSessionService {
       }
 
       await page.goto("https://x.com/", { waitUntil: "domcontentloaded", timeout: 60000 });
+      await page.waitForTimeout(2500);
+
+      // The persistent profile may itself carry a live X session (it shares
+      // cookies with the browser that performed the original login). If so,
+      // skip the login entirely and harvest the session into the file.
+      const profileCookies = await context.cookies();
+      if (profileCookies.some(c => c.name === "auth_token" && c.value.length > 0)) {
+        console.log("[twitter-login] profile already authenticated on X — harvesting session from profile");
+        await page.goto(TWITTER_HOME, { waitUntil: "commit", timeout: 30000 }).catch(() => undefined);
+        await page.waitForTimeout(2000);
+        await this.persistState(context, true);
+        logger.info("Twitter session harvested from the logged-in browser profile.");
+        return true;
+      }
 
       // Poll for the login form for up to 30s — slow networks (VPS) can take
       // much longer to hydrate the SPA than a desktop connection
@@ -658,7 +672,20 @@ export class TwitterSessionService {
       // most aggressively bot-protected endpoint, while the homepage's
       // Sign-in modal is a tamer entry point.
       await page.goto("https://x.com/", { waitUntil: "domcontentloaded", timeout: 45000 });
-      await page.waitForTimeout(3000);
+      await page.waitForTimeout(2500);
+
+      // The persistent profile may itself carry a live X session — if so,
+      // harvest it instead of trying to type credentials.
+      const profileCookies = await context.cookies();
+      if (profileCookies.some(c => c.name === "auth_token" && c.value.length > 0)) {
+        console.log("[twitter-login] profile already authenticated on X — harvesting session from profile");
+        await page.goto(TWITTER_HOME, { waitUntil: "commit", timeout: 30000 }).catch(() => undefined);
+        await page.waitForTimeout(2000);
+        await this.persistState(context, true);
+        logger.info("Twitter session harvested from the logged-in browser profile.");
+        return true;
+      }
+      await page.waitForTimeout(500);
 
       // Open the login form if the homepage doesn't show it directly
       const usernameProbe = async (): Promise<boolean> => {
