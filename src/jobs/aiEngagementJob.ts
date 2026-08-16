@@ -44,8 +44,15 @@ export function sanitize(text: string) {
 // ------------------- GENERATOR -------------------
 
 export async function runGenerator() {
+  console.log(`[sim ${new Date().toISOString()}] generator cycle start`);
   logger.info("Redirecting generator trigger to new Simulation Engine Cycle...");
-  await SimulationEngine.runSimulationCycle();
+  try {
+    await SimulationEngine.runSimulationCycle();
+    console.log(`[sim ${new Date().toISOString()}] generator cycle complete`);
+  } catch (e: any) {
+    console.log(`[sim ${new Date().toISOString()}] generator cycle ERROR: ${e?.message}`);
+    throw e;
+  }
 }
 
 // ------------------- REAL USER ENGAGEMENT -------------------
@@ -348,25 +355,31 @@ export function setupAiEngagementJob(): void {
   new CronJob(
     "* * * * *",
     async () => {
+      const t0 = Date.now();
       try {
         await runGenerator();
       } catch (e) {
         logger.error("AI Generator Error:", e);
+      } finally {
+        console.log(`[tick] generator tick finished in ${Date.now() - t0}ms`);
       }
     },
     null,
     true,
     "UTC"
   );
-  
+
   // Processor runs every 1 minute for testing (was 2 minutes)
   new CronJob(
     "* * * * *",
     async () => {
+      const t0 = Date.now();
       try {
         await runQueueProcessor();
       } catch (e) {
         logger.error("AI Queue Processor Error:", e);
+      } finally {
+        console.log(`[tick] queue processor tick finished in ${Date.now() - t0}ms`);
       }
     },
     null,
