@@ -1,8 +1,14 @@
 import Stripe from "stripe";
-import { supabase } from "../config/supabase";
+import { supabase, supabaseAdmin } from "../config/supabase";
 import { Tables, TablesInsert } from "../types/supabase";
 import { PostService } from "./postService";
 import { PaymentReferenceType } from "../models/marketplace.model";
+
+// All payment DB operations are server-side: use the service-role
+// client so Row Level Security doesn't block writes. The `payments`
+// table only grants INSERT/UPDATE to service_role (anon is denied),
+// which made checkout fail with "Failed to create payment record".
+const db = supabaseAdmin ?? supabase;
 
 // Initialize the Stripe client with your secret key.
 // It's crucial to keep this key secure and use environment variables.
@@ -25,7 +31,7 @@ async function _createCheckoutSession(
   cancelUrl: string,
 ): Promise<Stripe.Checkout.Session> {
   // Use the user's email for the Stripe customer.
-  const { data: user, error: userError } = await supabase
+  const { data: user, error: userError } = await db
     .from("users")
     .select("email")
     .eq("id", payment.user_id)
@@ -84,7 +90,7 @@ export async function createSubscriptionCheckoutSession(
   successUrl: string,
   cancelUrl: string,
 ): Promise<{ id: string; url: string | null }> {
-  const { data: tier, error: tierError } = await supabase
+  const { data: tier, error: tierError } = await db
     .from("subscription_tiers")
     .select("price, duration_days")
     .eq("id", tierId)
@@ -102,7 +108,7 @@ export async function createSubscriptionCheckoutSession(
       startedAt.getTime() + tier.duration_days * 24 * 60 * 60 * 1000,
     );
 
-    const { error: subscriptionError } = await supabase
+    const { error: subscriptionError } = await db
       .from("user_subscriptions")
       .insert({
         user_id: userId,
@@ -130,7 +136,7 @@ export async function createSubscriptionCheckoutSession(
     payment_method: "stripe",
   };
 
-  const { data: payment, error: paymentError } = await supabase
+  const { data: payment, error: paymentError } = await db
     .from("payments")
     .insert(paymentData)
     .select()
@@ -138,7 +144,9 @@ export async function createSubscriptionCheckoutSession(
 
   if (paymentError || !payment) {
     console.error("Supabase payment insert error:", paymentError);
-    throw new Error("Failed to create payment record.");
+    throw new Error(
+      `Failed to create payment record. (${paymentError?.code ?? "unknown"}: ${paymentError?.message ?? "no row returned"})`,
+    );
   }
 
   return _createCheckoutSession(payment, successUrl, cancelUrl);
@@ -160,13 +168,14 @@ export async function createPostBoostCheckoutSession(
   successUrl: string,
   cancelUrl: string,
 ): Promise<Stripe.Checkout.Session> {
-  const { data: boost, error: boostError } = await supabase
+  const { data: boost, error: boostError } = await db
     .from("post_boosts")
     .select("amount")
     .eq("id", boostId)
     .single();
 
   if (boostError || !boost) {
+    console.error("Post boost lookup error:", boostError);
     throw new Error("Post boost not found.");
   }
 
@@ -180,14 +189,17 @@ export async function createPostBoostCheckoutSession(
     payment_method: "stripe",
   };
 
-  const { data: payment, error: paymentError } = await supabase
+  const { data: payment, error: paymentError } = await db
     .from("payments")
     .insert(paymentData)
     .select()
     .single();
 
   if (paymentError || !payment) {
-    throw new Error("Failed to create payment record for boost.");
+    console.error("Supabase payment insert error (boost):", paymentError);
+    throw new Error(
+      `Failed to create payment record for boost. (${paymentError?.code ?? "unknown"}: ${paymentError?.message ?? "no row returned"})`,
+    );
   }
 
   return _createCheckoutSession(payment, successUrl, cancelUrl);
@@ -203,9 +215,6 @@ export async function createPostBoostCheckoutSession(
  */
 export const handleStripeWebhook = async (body: Buffer, signature: string) => {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-  console.log("[StripeWebhook] webhookSecret:", webhookSecret);
-  console.log("[StripeWebhook] Received body (Buffer length):", body?.length);
-  console.log("[StripeWebhook] Received signature:", signature);
 
   if (!webhookSecret) {
     console.error(
@@ -214,50 +223,26 @@ export const handleStripeWebhook = async (body: Buffer, signature: string) => {
     throw new Error("Stripe webhook secret is not configured");
   }
 
+  // Verify the event signature — the route passes the raw body via
+  // express.raw. Without this, anyone could POST a forged
+  // checkout.session.completed and get free boosts/subscriptions.
   let event: Stripe.Event;
-
-  // HACK: Skip signature verification and parse JSON directly
   try {
-    const bodyString = body.toString("utf8");
-    console.log(
-      "[StripeWebhook] HACK: Skipping signature verification, parsing body directly",
-    );
-    event = JSON.parse(bodyString) as Stripe.Event;
-    console.log(
-      "[StripeWebhook] Event parsed directly:",
-      event?.id,
-      event?.type,
-    );
-  } catch (parseError: any) {
+    event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+  } catch (err: any) {
     console.error(
-      "[StripeWebhook] ERROR: Failed to parse webhook body as JSON:",
-      parseError.message,
+      "[StripeWebhook] ERROR: Signature verification failed — check that STRIPE_WEBHOOK_SECRET matches the Stripe webhook endpoint's signing secret:",
+      err.message,
     );
-
-    // Fallback: Try signature verification anyway
-    try {
-      event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
-      console.log(
-        "[StripeWebhook] Event constructed via fallback:",
-        event?.id,
-        event?.type,
-      );
-    } catch (err: any) {
-      console.error(
-        "[StripeWebhook] ERROR: Both direct parsing and signature verification failed:",
-        err.message,
-      );
-      throw new Error(`Webhook processing failed: ${err.message}`);
-    }
+    throw new Error(`Webhook signature verification failed: ${err.message}`);
   }
 
   console.log("[StripeWebhook] Event type:", event.type);
 
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
-    console.log("[StripeWebhook] checkout.session.completed session:", session);
+    console.log("[StripeWebhook] session id:", session.id);
     const paymentId = session.metadata?.payment_id;
-    console.log("[StripeWebhook] session.metadata:", session.metadata);
     console.log("[StripeWebhook] paymentId:", paymentId);
 
     if (!paymentId) {
@@ -267,12 +252,12 @@ export const handleStripeWebhook = async (body: Buffer, signature: string) => {
       throw new Error("Payment ID not found in checkout session metadata");
     }
 
-    const { data: payment, error: paymentError } = await supabase
+    const { data: payment, error: paymentError } = await db
       .from("payments")
       .select("*")
       .eq("id", paymentId)
       .single();
-    console.log("[StripeWebhook] Fetched payment:", payment, paymentError);
+    console.log("[StripeWebhook] Fetched payment:", payment?.id ?? null);
 
     if (paymentError || !payment) {
       console.error(
@@ -283,7 +268,7 @@ export const handleStripeWebhook = async (body: Buffer, signature: string) => {
     }
 
     // Update payment status
-    const { error: updateError } = await supabase
+    const { error: updateError } = await db
       .from("payments")
       .update({
         status: "completed",
@@ -314,7 +299,7 @@ export const handleStripeWebhook = async (body: Buffer, signature: string) => {
         "tier:",
         payment.reference_id,
       );
-      const { data: tier, error: tierError } = await supabase
+      const { data: tier, error: tierError } = await db
         .from("subscription_tiers")
         .select("duration_days")
         .eq("id", payment.reference_id)
@@ -331,7 +316,7 @@ export const handleStripeWebhook = async (body: Buffer, signature: string) => {
         startedAt.getTime() + tier.duration_days * 24 * 60 * 60 * 1000,
       );
 
-      const { error: subError } = await supabase
+      const { error: subError } = await db
         .from("user_subscriptions")
         .insert({
           user_id: payment.user_id,
@@ -367,7 +352,7 @@ export const handleStripeWebhook = async (body: Buffer, signature: string) => {
       "[StripeWebhook] customer.subscription.updated subscription:",
       subscription,
     );
-    const { error } = await supabase
+    const { error } = await db
       .from("user_subscriptions")
       .update({ status: subscription.status })
       .eq("stripe_subscription_id", subscription.id);
@@ -385,7 +370,7 @@ export const handleStripeWebhook = async (body: Buffer, signature: string) => {
       "[StripeWebhook] customer.subscription.deleted subscription:",
       subscription,
     );
-    const { error } = await supabase
+    const { error } = await db
       .from("user_subscriptions")
       .update({ status: "cancelled" })
       .eq("stripe_subscription_id", subscription.id);
