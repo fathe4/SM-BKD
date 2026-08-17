@@ -165,7 +165,7 @@ export class StatsService {
    */
   private static async getSubscriptionStats(userId: string) {
     // user_subscriptions has RLS — read with the service-role client
-    const { data: subscription, error: subscriptionError } = await supabaseAdmin
+    const { data: subscription, error: subscriptionError } = await supabaseAdmin!
       .from("user_subscriptions")
       .select(
         `
