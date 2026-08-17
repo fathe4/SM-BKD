@@ -83,15 +83,41 @@ export async function createSubscriptionCheckoutSession(
   tierId: string,
   successUrl: string,
   cancelUrl: string,
-): Promise<Stripe.Checkout.Session> {
+): Promise<{ id: string; url: string | null }> {
   const { data: tier, error: tierError } = await supabase
     .from("subscription_tiers")
-    .select("price")
+    .select("price, duration_days")
     .eq("id", tierId)
     .single();
 
   if (tierError || !tier) {
     throw new Error("Subscription tier not found.");
+  }
+
+  // Free tiers (price 0) cannot go through Stripe — checkout sessions
+  // must have a positive amount. Activate the subscription directly.
+  if (Number(tier.price) <= 0) {
+    const startedAt = new Date();
+    const expiresAt = new Date(
+      startedAt.getTime() + tier.duration_days * 24 * 60 * 60 * 1000,
+    );
+
+    const { error: subscriptionError } = await supabase
+      .from("user_subscriptions")
+      .insert({
+        user_id: userId,
+        subscription_tier_id: tierId,
+        status: "active",
+        started_at: startedAt.toISOString(),
+        expires_at: expiresAt.toISOString(),
+      });
+
+    if (subscriptionError) {
+      console.error("Supabase free subscription insert error:", subscriptionError);
+      throw new Error("Failed to activate free subscription.");
+    }
+
+    return { id: `free-tier-${tierId}`, url: successUrl };
   }
 
   const paymentData: TablesInsert<"payments"> = {
