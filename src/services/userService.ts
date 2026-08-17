@@ -546,7 +546,8 @@ export class UserService {
         return cached;
       }
 
-      const { data } = await supabase
+      // user_subscriptions has RLS — read with the service-role client
+      const { data } = await supabaseAdmin
         .from("user_subscriptions")
         .select(
           `

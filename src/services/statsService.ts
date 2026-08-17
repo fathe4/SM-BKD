@@ -1,4 +1,4 @@
-import { supabase } from "../config/supabase";
+import { supabase, supabaseAdmin } from "../config/supabase";
 import { AppError } from "../middlewares/errorHandler";
 import { logger } from "../utils/logger";
 
@@ -164,7 +164,8 @@ export class StatsService {
    * Get subscription statistics
    */
   private static async getSubscriptionStats(userId: string) {
-    const { data: subscription, error: subscriptionError } = await supabase
+    // user_subscriptions has RLS — read with the service-role client
+    const { data: subscription, error: subscriptionError } = await supabaseAdmin
       .from("user_subscriptions")
       .select(
         `
