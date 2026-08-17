@@ -23,6 +23,7 @@
     "twitter:check": "ts-node src/scripts/twitterSessionManager.ts check",
     "twitter:google-setup": "ts-node src/scripts/twitterSessionManager.ts google-setup",
     "seed": "ts-node src/scripts/seed.ts",
+    "seed:pricing": "ts-node src/scripts/migrations/seedPricing.ts",
     "migrate:privacy-settings": "ts-node src/scripts/migrations/addUserPrivacySettingsTable.ts"
   },
   "dependencies": {
