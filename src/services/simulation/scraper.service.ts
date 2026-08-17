@@ -763,8 +763,18 @@ export class ScraperService {
       const stuckForMs = Date.now() - this.scrapeStartedAt;
       if (stuckForMs > this.SCRAPE_STUCK_THRESHOLD_MS) {
         logger.warn(
-          `Scraper pipeline appeared stuck for ${Math.round(stuckForMs / 60000)} min — reclaiming the mutex and starting a fresh run.`
+          `Scraper pipeline appeared stuck for ${Math.round(stuckForMs / 60000)} min — reclaiming the mutex, killing orphaned browsers, and starting a fresh run.`
         );
+        // Reap orphaned headless browsers from the hung run — they would
+        // otherwise keep burning CPU until manually cleaned. Only the
+        // bundled headless shell is targeted; the persistent Chrome profile
+        // used by Google OAuth login runs under a different binary.
+        try {
+          const { exec } = require("child_process");
+          exec("pkill -f chrome-headless-shell", () => undefined);
+        } catch {
+          // best-effort cleanup
+        }
         this.isScraping = false;
       } else {
         logger.warn("Scraper pipeline is already running. Skipping concurrent execution.");
