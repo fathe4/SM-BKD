@@ -20,13 +20,34 @@ import { getIO } from "../../socketio";
 import { getUserSocketIds } from "../../socketio/handlers/connectionHandler";
 
 export class SimulationEngine {
+  /** Overlap guard: only one cycle at a time (1-core CPU protection). */
+  private static cycleRunning: boolean = false;
+  private static cycleStartedAt: number = 0;
+  /** A cycle older than this is considered hung; the guard is bypassed. */
+  private static readonly CYCLE_STUCK_THRESHOLD_MS = 10 * 60 * 1000;
+
   /**
    * Run one complete tick cycle (Ingestion, Ranking, Attention Scroll, Queue Processing)
    */
   static async runSimulationCycle(): Promise<void> {
-    logger.info("Starting simulation tick cycle...");
-
+    // Cycles can outlast the 1-minute cron interval, and 2-3 of them running
+    // concurrently saturate a 1-core VPS. Skip ticks while a cycle is still
+    // in flight (with an escape hatch for a hung cycle).
+    if (this.cycleRunning) {
+      const stuckForMs = Date.now() - this.cycleStartedAt;
+      if (stuckForMs > this.CYCLE_STUCK_THRESHOLD_MS) {
+        logger.warn(
+          `Simulation cycle appeared stuck for ${Math.round(stuckForMs / 60000)} min — proceeding with a new cycle anyway.`
+        );
+      } else {
+        logger.warn("Previous simulation cycle still running — skipping this tick (CPU protection).");
+        return;
+      }
+    }
+    this.cycleRunning = true;
+    this.cycleStartedAt = Date.now();
     try {
+      logger.info("Starting simulation tick cycle...");
       // Get clock state early to check tick count and use later for updating
       const { data: clockState } = await supabaseAdmin!
         .from("simulation_state")
@@ -303,6 +324,8 @@ export class SimulationEngine {
       logger.info("Simulation tick cycle completed successfully.");
     } catch (err: any) {
       logger.error(`Error in simulation cycle run: ${err.message}`);
+    } finally {
+      this.cycleRunning = false;
     }
   }
 
