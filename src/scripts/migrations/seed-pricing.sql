@@ -2,8 +2,9 @@
 -- PRICING SEED — boost pricing, subscription tiers, marketplace
 -- categories, free-tier subscriptions + auto-subscribe trigger.
 -- Idempotent: safe to run multiple times.
--- Statements are separated by the "-- !split" marker (parsed by
--- seedPricing.ts because trigger bodies contain ";").
+-- Statements are separated by a standalone marker comment line
+-- (see seedPricing.ts for the exact splitter, needed because
+-- trigger bodies contain semicolons).
 -- ============================================================
 
 -- ------------------------------------------------------------

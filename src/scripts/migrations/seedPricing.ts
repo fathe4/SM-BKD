@@ -29,10 +29,22 @@ async function seedPricing() {
     const sqlPath = path.join(__dirname, "seed-pricing.sql");
     const sql = fs.readFileSync(sqlPath, "utf8");
 
+    // Split on standalone marker LINES only (-- !split on its own line),
+    // so the marker text mentioned inside SQL comments is never treated
+    // as a split point.
     const statements = sql
-      .split("-- !split")
-      .map((statement) => statement.trim())
-      .filter((statement) => statement.length > 0);
+      .split(/\n/)
+      .reduce<{ lines: string[] }[]>((blocks, line) => {
+        if (/^\s*--\s*!split\s*$/.test(line)) {
+          blocks.push({ lines: [] });
+        } else {
+          if (blocks.length === 0) blocks.push({ lines: [] });
+          blocks[blocks.length - 1].lines.push(line);
+        }
+        return blocks;
+      }, [])
+      .map(block => block.lines.join("\n").trim())
+      .filter(statement => statement.length > 0);
 
     for (let i = 0; i < statements.length; i++) {
       logger.info(`Executing statement ${i + 1}/${statements.length}`);
@@ -41,7 +53,10 @@ async function seedPricing() {
       });
 
       if (error) {
-        logger.error(`Error executing statement ${i + 1}:`, error);
+        logger.error(
+          `Error executing statement ${i + 1} (starts with: ${statements[i].slice(0, 80)}...):`,
+          error,
+        );
         throw error;
       }
     }
