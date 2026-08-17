@@ -33,6 +33,10 @@ export interface TwitterScrapedPost {
 
 export class ScraperService {
   private static isScraping: boolean = false;
+  /** When the current pipeline run started — used by the stuck-run watchdog. */
+  private static scrapeStartedAt: number = 0;
+  /** A pipeline run older than this is considered hung; the mutex is reclaimed. */
+  private static readonly SCRAPE_STUCK_THRESHOLD_MS = 15 * 60 * 1000;
   /** Circuit breaker: set when any scrape hits a login wall so the pipeline can stop early. */
   private static sessionExpiredDetected: boolean = false;
 
@@ -752,11 +756,23 @@ export class ScraperService {
     subreddits: string[] = REDDIT_SUBREDDITS,
     twitterProfiles: string[] = ["Can_TheOnee", "linadreaamy", "YashRMFC", "elonmusk", "levelsio", "dril", "iamdevloper", "trolled_dev", "shitpost_bot", "software_jokes"]
   ): Promise<number> {
+    // Watchdog: a run whose browser hung (observed in production — a runaway
+    // renderer held the mutex for 14+ hours) must not block scrapes forever.
+    // Reclaim the mutex when the previous run is unreasonably old.
     if (this.isScraping) {
-      logger.info("Scraper pipeline is already running. Skipping concurrent execution.");
-      return 0;
+      const stuckForMs = Date.now() - this.scrapeStartedAt;
+      if (stuckForMs > this.SCRAPE_STUCK_THRESHOLD_MS) {
+        logger.warn(
+          `Scraper pipeline appeared stuck for ${Math.round(stuckForMs / 60000)} min — reclaiming the mutex and starting a fresh run.`
+        );
+        this.isScraping = false;
+      } else {
+        logger.warn("Scraper pipeline is already running. Skipping concurrent execution.");
+        return 0;
+      }
     }
     this.isScraping = true;
+    this.scrapeStartedAt = Date.now();
     try {
       logger.info("Starting Playwright Scraper Pipeline...");
       let totalIngested = 0;
