@@ -32,11 +32,13 @@ interface TaskConfig {
  */
 const TASK_CONFIG: Record<LlmTask, TaskConfig> = {
   // ── Active tasks ──────────────────────────────
-  comment:           { provider: "groq",   model: "llama-3.1-8b-instant" },
-  comment_critique:  { provider: "groq",   model: "llama-3.1-8b-instant" },
+  // NOTE: Groq decommissioned the llama-3.1/3.3 models (HTTP 404 model_not_found
+  // since ~2026-08-17) — every Groq task now uses their current lineup.
+  comment:           { provider: "groq",   model: "openai/gpt-oss-20b" },
+  comment_critique:  { provider: "groq",   model: "openai/gpt-oss-20b" },
   post_generate:     { provider: "openai", model: "gpt-4o-mini" },
-  chat:              { provider: "groq",   model: "llama-3.3-70b-versatile" },
-  memory:            { provider: "groq",   model: "llama-3.1-8b-instant" },
+  chat:              { provider: "groq",   model: "openai/gpt-oss-120b" },
+  memory:            { provider: "groq",   model: "openai/gpt-oss-20b" },
 
   // ── Disabled tasks (scraping pipeline off) ────
   // These still have valid config so enabling them later is just uncommenting

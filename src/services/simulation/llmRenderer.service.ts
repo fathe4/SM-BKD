@@ -447,7 +447,7 @@ STRICT RULES — follow every single one:
           { role: "user", content: userPrompt }
         ],
         temperature: 0.85,
-        max_tokens: 80, // Hard cap — keeps replies short
+        max_tokens: 200, // gpt-oss reasoning tokens count against this cap — keep headroom above the ~80-word reply budget
       });
 
       const content = this.sanitizeChatOutput(response.content);

@@ -13,6 +13,10 @@ export class GroqAdapter implements LlmClient {
 
   /** Groq pricing per million tokens (free tier generous; paid tier very cheap). */
   private static readonly COST = {
+    // Current lineup (prices are estimates for cost tracking only)
+    "openai/gpt-oss-20b":       { input: 0.10, output: 0.10 },
+    "openai/gpt-oss-120b":      { input: 0.25, output: 0.25 },
+    // Decommissioned by Groq (kept for historical cost records)
     "llama-3.1-8b-instant":    { input: 0.05, output: 0.08 },
     "llama-3.3-70b-versatile": { input: 0.59, output: 0.79 },
     "llama-3.1-70b-versatile": { input: 0.59, output: 0.79 },
