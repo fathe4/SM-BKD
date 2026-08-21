@@ -23,6 +23,13 @@ export interface LlmCallParams {
   max_tokens?: number;
   /** Request JSON object output. Only supported by OpenAI-compatible endpoints. */
   response_format?: { type: "json_object" | "text" };
+  /**
+   * Reasoning effort for reasoning models (gpt-oss etc.).
+   * "low" keeps reasoning tokens minimal — important when max_tokens is capped,
+   * since reasoning tokens count against the completion budget and can starve
+   * the final content down to an empty string.
+   */
+  reasoning_effort?: "low" | "medium" | "high";
 }
 
 export interface LlmUsage {

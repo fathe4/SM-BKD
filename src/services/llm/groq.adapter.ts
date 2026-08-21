@@ -41,6 +41,9 @@ export class GroqAdapter implements LlmClient {
         max_tokens: params.max_tokens,
         // Note: Groq supports json_object response_format for most models
         response_format: params.response_format as any,
+        // gpt-oss models only — low effort keeps reasoning tokens from eating
+        // the max_tokens budget (undefined is omitted for non-reasoning models)
+        reasoning_effort: params.reasoning_effort as any,
       });
 
       const content = response.choices[0].message.content ?? "";

@@ -447,7 +447,8 @@ STRICT RULES — follow every single one:
           { role: "user", content: userPrompt }
         ],
         temperature: 0.85,
-        max_tokens: 200, // gpt-oss reasoning tokens count against this cap — keep headroom above the ~80-word reply budget
+        max_tokens: 600, // gpt-oss reasoning tokens count against this cap — keep headroom above the reply itself
+        reasoning_effort: "low", // casual 1-2 sentence DMs need no deep reasoning; keeps tokens off the cap
       });
 
       const content = this.sanitizeChatOutput(response.content);
