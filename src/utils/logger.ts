@@ -76,7 +76,12 @@ export const logger = winston.createLogger({
   format: logFormat,
   transports:
     env === "production"
-      ? [] // No transports in production (logger disabled)
+      ? [
+          // Production: console only — PM2 captures stdout/stderr.
+          // A fully silent logger hid a 4-day AI outage (Aug 2026); errors
+          // and warnings must always be visible.
+          new winston.transports.Console(),
+        ]
       : [
           // Console transport
           new winston.transports.Console(),
@@ -99,11 +104,6 @@ export const logger = winston.createLogger({
           }),
         ],
 });
-
-// Make sure logger methods don't throw errors when called in production
-if (env === "production") {
-  logger.silent = true;
-}
 
 // Stream for Morgan (HTTP request logger)
 export const morganStream = {
