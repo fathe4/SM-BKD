@@ -48,11 +48,15 @@ export class SimulationEngine {
     this.cycleStartedAt = Date.now();
     try {
       logger.info("Starting simulation tick cycle...");
-      // Get clock state early to check tick count and use later for updating
+      // Get clock state early to check tick count and use later for updating.
+      // NOTE: .single() throws PGRST116 if duplicate simulation_state rows ever
+      // appear (a seeder ran twice on 2026-08-15 and froze the whole simulation
+      // clock for 12 days). limit(1).maybeSingle() tolerates that.
       const { data: clockState } = await supabaseAdmin!
         .from("simulation_state")
         .select("*")
-        .single();
+        .limit(1)
+        .maybeSingle();
 
       let currentTick = 0;
       if (clockState) {
@@ -929,7 +933,8 @@ export class SimulationEngine {
       const { data: clock } = await supabaseAdmin!
         .from("simulation_state")
         .select("id, last_budget_reset_date")
-        .single();
+        .limit(1)
+        .maybeSingle();
 
       if (clock && clock.last_budget_reset_date !== todayDate) {
         logger.info(`New real-world day reached: ${todayDate}. Resetting daily budgets and counts for all personas.`);
