@@ -415,9 +415,12 @@ export class EtiquetteService {
       }
 
       // Adjust interaction probabilities to align with organic like-to-view ratios (5% - 20% max)
+      // Real-user (HUMAN) posts use higher caps so engagement completes within the 5-minute fast-burst window
       const interactionMultiplier = candidate.origin === "HUMAN" ? 5.5 : 4.0;
-      const commentChance = Math.min(0.08, engagementScore * profile.reply_probability * interactionMultiplier * 0.15 * likesSlowdownMultiplier);
-      const likeChance = Math.min(0.20, engagementScore * (profile.reply_probability + profile.emoji_probability) * interactionMultiplier * 0.4 * likesSlowdownMultiplier);
+      const commentChanceCap = candidate.origin === "HUMAN" ? 0.15 : 0.08;
+      const likeChanceCap = candidate.origin === "HUMAN" ? 0.30 : 0.20;
+      const commentChance = Math.min(commentChanceCap, engagementScore * profile.reply_probability * interactionMultiplier * 0.15 * likesSlowdownMultiplier);
+      const likeChance = Math.min(likeChanceCap, engagementScore * (profile.reply_probability + profile.emoji_probability) * interactionMultiplier * 0.4 * likesSlowdownMultiplier);
 
       logger.info(`🎲 @${persona.username} evaluating interaction on @${postCreatorUsername}'s post: [Like chance: ${(likeChance * 100).toFixed(1)}%] [Comment chance: ${(commentChance * 100).toFixed(1)}%]`);
 
@@ -426,9 +429,9 @@ export class EtiquetteService {
       // 1. Evaluate LIKE (Lower barrier, checked independently)
       if (roll < likeChance) {
         if (!hasPersonaLiked) {
-          // Organic human engagement: 30 seconds to 4 minutes delay. Otherwise, standard pacing.
+          // Fast burst for real-user posts: 15-75 seconds. Otherwise, standard pacing.
           const delay = candidate.origin === "HUMAN"
-            ? (Math.floor(Math.random() * 211) + 30) / 60
+            ? (Math.floor(Math.random() * 61) + 15) / 60
             : Math.max(1, Math.round(profile.avg_response_delay_minutes * 0.3)) + spacingDelay;
           await this.queueAction(personaId, persona.username, "LIKE", { post_id: candidate.reference_id, target_user_id: postCreatorId }, delay);
           logger.info(`❤️ @${persona.username} decided to LIKE @${postCreatorUsername}'s post (enqueued with ${delay.toFixed(2)}m delay).`);
@@ -441,9 +444,9 @@ export class EtiquetteService {
       // 2. Evaluate COMMENT (Higher barrier, checked independently via a separate roll)
       const commentRoll = Math.random();
       if (commentRoll < commentChance) {
-        // Organic human engagement: 1 to 4.5 minutes delay. Otherwise, standard pacing.
+        // Fast burst for real-user posts: 30-150 seconds. Otherwise, standard pacing.
         const delay = candidate.origin === "HUMAN"
-          ? (Math.floor(Math.random() * 211) + 60) / 60
+          ? (Math.floor(Math.random() * 121) + 30) / 60
           : Math.max(1, Math.round(profile.avg_response_delay_minutes * (1.5 - state.energy))) + spacingDelay;
         await this.queueAction(personaId, persona.username, "COMMENT", { post_id: candidate.reference_id, target_user_id: postCreatorId, candidate_id: candidate.id }, delay);
         logger.info(`💬 @${persona.username} decided to COMMENT on @${postCreatorUsername}'s post (enqueued with ${delay.toFixed(2)}m delay).`);

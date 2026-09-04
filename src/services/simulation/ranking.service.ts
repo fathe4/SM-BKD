@@ -111,18 +111,20 @@ export class RankingService {
           continue;
         }
 
-        // Staggered distribution: new posts are distributed to personas gradually over 60 minutes
+        // Staggered distribution: new posts are distributed to personas gradually.
+        // Real-user (HUMAN) posts use a short 4-minute window so all AI engagement lands within ~5 minutes;
+        // AI posts keep the organic 60-minute window.
         const candPublishedTime = new Date(candidate.published_at).getTime();
         const candAgeMinutes = (Date.now() - candPublishedTime) / 60000;
-        if (candAgeMinutes < 60) {
+        const distributionWindowMinutes = candidate.origin === "HUMAN" ? 4 : 60;
+        if (candAgeMinutes < distributionWindowMinutes) {
           // Generate a consistent pseudo-random distribution delay for this persona-candidate pair
           const seedStr = `${persona.id}-${candidate.id}`;
           let hash = 0;
           for (let i = 0; i < seedStr.length; i++) {
             hash = seedStr.charCodeAt(i) + ((hash << 5) - hash);
           }
-          const maxDelayMinutes = 60;
-          const distributionDelay = Math.abs(hash) % maxDelayMinutes;
+          const distributionDelay = Math.abs(hash) % distributionWindowMinutes;
           
           if (candAgeMinutes < distributionDelay) {
             // Not yet distributed to this persona's feed cache
