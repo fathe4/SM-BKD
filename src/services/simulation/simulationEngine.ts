@@ -341,6 +341,28 @@ export class SimulationEngine {
     let postsThisTick = 0; // shared across the 5 workers (POST sub-cap)
     const maxJobsPerTick = 15;
 
+    // Reclaim jobs stuck in 'processing' (e.g. after a crash or a hung execution)
+    // so they are retried instead of being orphaned forever.
+    try {
+      const { data: reclaimed, error: reclaimError } = await supabaseAdmin!
+        .from("behavior_jobs")
+        .update({
+          status: "pending",
+          run_at: new Date(Date.now() + 30_000).toISOString(),
+        })
+        .eq("status", "processing")
+        .lt("run_at", new Date(Date.now() - 5 * 60_000).toISOString())
+        .select("id");
+
+      if (reclaimError) {
+        logger.error(`Error reclaiming stale processing jobs: ${reclaimError.message}`);
+      } else if (reclaimed && reclaimed.length > 0) {
+        logger.warn(`♻️ Reclaimed ${reclaimed.length} stale 'processing' job(s) back to pending.`);
+      }
+    } catch (err: any) {
+      logger.error(`Error reclaiming stale processing jobs: ${err.message}`);
+    }
+
     const worker = async () => {
       while (true) {
         if (processedCount >= maxJobsPerTick) break;
@@ -368,6 +390,14 @@ export class SimulationEngine {
 
         if (fetchError || !fullJob) {
           logger.error(`Error fetching claimed job details for job ${lockedJob.r_id}: ${fetchError?.message}`);
+          // Requeue instead of orphaning the job in 'processing' forever
+          await supabaseAdmin!
+            .from("behavior_jobs")
+            .update({
+              status: "pending",
+              run_at: new Date(Date.now() + 30_000).toISOString(),
+            })
+            .eq("id", lockedJob.r_id);
           continue;
         }
 
@@ -392,7 +422,31 @@ export class SimulationEngine {
           postsThisTick++;
         }
 
-        await this.processSingleJob(fullJob);
+        // Guard against hung executions (e.g. an LLM call that never resolves):
+        // force the job into the retry path after 2 minutes so a worker never leaks.
+        const JOB_TIMEOUT_MS = 2 * 60_000;
+        try {
+          await Promise.race([
+            this.processSingleJob(fullJob),
+            new Promise((_resolve, reject) =>
+              setTimeout(
+                () => reject(new Error(`Job ${fullJob.id} (${fullJob.action_type}) timed out after ${JOB_TIMEOUT_MS / 1000}s`)),
+                JOB_TIMEOUT_MS,
+              ),
+            ),
+          ]);
+        } catch (timeoutErr: any) {
+          logger.error(`⏱️ ${timeoutErr.message} — requeueing for retry.`);
+          const attempts = fullJob.attempts || 0;
+          await supabaseAdmin!
+            .from("behavior_jobs")
+            .update({
+              status: attempts >= 3 ? "failed" : "pending",
+              run_at: new Date(Date.now() + 60_000).toISOString(),
+              last_error: timeoutErr.message,
+            })
+            .eq("id", fullJob.id);
+        }
       }
     };
 
@@ -890,8 +944,8 @@ export class SimulationEngine {
       if (attempts >= maxAttempts) {
         status = "failed";
       } else {
-        // Exponential backoff retry: 2m, 5m, 15m
-        const delayMinutes = attempts === 1 ? 2 : attempts === 2 ? 5 : 15;
+        // Fast backoff retry: 1m, 2m, 5m — keeps failed jobs inside the 5-minute engagement window
+        const delayMinutes = attempts === 1 ? 1 : attempts === 2 ? 2 : 5;
         nextRunAt = new Date(Date.now() + delayMinutes * 60000);
       }
 
