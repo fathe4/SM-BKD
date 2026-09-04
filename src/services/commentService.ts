@@ -138,12 +138,22 @@ export class CommentService {
       // Create notification for post owner if it's not their own comment
       if (post.user_id !== commentData.user_id) {
         try {
+          // Resolve the commenter's display name so the notification shows a name, not a raw user id
+          const { data: actor } = await supabaseAdmin!
+            .from("users")
+            .select("first_name, last_name, username")
+            .eq("id", commentData.user_id)
+            .single();
+          const displayName = actor
+            ? `${actor.first_name} ${actor.last_name}`.trim() || actor.username || "Someone"
+            : "Someone";
+
           await NotificationService.createNotification({
             user_id: post.user_id,
             actor_id: commentData.user_id,
             reference_id: data.id,
             reference_type: ReferenceType.COMMENT,
-            content: `${commentData.user_id} commented on your post`,
+            content: `${displayName} commented on your post`,
           });
         } catch (error) {
           logger.error("Failed to create comment notification:", error);
