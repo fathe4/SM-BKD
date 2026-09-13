@@ -476,43 +476,111 @@ export class PostService {
         page: number;
         limit: number;
     }): any[] => {
-        const { userPosts, friendsPosts, boostedPosts, friendLikedPosts, publicPosts, page, limit } =
-            options;
+        const {
+            userPosts = [],
+            friendsPosts = [],
+            boostedPosts = [],
+            friendLikedPosts = [],
+            publicPosts = [],
+            page = 1,
+            limit = 10,
+        } = options;
 
         // Tag all posts with their feed type
         const taggedUserPosts = userPosts.map(post => ({ ...post, feed_type: "own" }));
         const taggedFriendsPosts = friendsPosts.map(post => ({ ...post, feed_type: "friends" }));
-        const taggedBoostedPosts = boostedPosts.map(post => ({ ...post, feed_type: "boosted" }));
         const taggedFriendLikedPosts = friendLikedPosts.map(post => ({ ...post, feed_type: "friend_liked" }));
         const taggedPublicPosts = publicPosts.map(post => ({ ...post, feed_type: "public" }));
 
-        // Combine all posts
-        const allPosts = [
+        // Boosted posts are PAID placement: order them by boost activation
+        // time (post_boosts.created_at, reset on activation) — NOT by the
+        // post's original creation date. Sorting boosts into the organic
+        // chronology buries older posts under fresh content and the paid
+        // boost never surfaces on early pages.
+        const getBoostTime = (post: any): number => {
+            const boost = Array.isArray(post.post_boosts)
+                ? post.post_boosts[0]
+                : null;
+            if (boost) {
+                const t = new Date(
+                    boost.created_at ?? boost.expires_at
+                ).getTime();
+                if (!Number.isNaN(t)) return t;
+            }
+            const fallback = new Date(
+                post.expires_at ?? post.created_at
+            ).getTime();
+            return Number.isNaN(fallback) ? 0 : fallback;
+        };
+        const sortedBoosted = boostedPosts
+            .map(post => ({ ...post, feed_type: "boosted" }))
+            .sort((a, b) => getBoostTime(b) - getBoostTime(a));
+
+        // If the viewer is connected to the post (own / friends /
+        // friend-liked), keep the organic copy — boosts extend reach to
+        // non-connections rather than re-tagging content the viewer knows.
+        // The public lane is filler: for boosted posts it must yield to the
+        // paid copy (and be dropped to avoid duplicate cards).
+        const connectionPool = [
             ...taggedUserPosts,
             ...taggedFriendsPosts,
-            ...taggedBoostedPosts,
             ...taggedFriendLikedPosts,
-            ...taggedPublicPosts,
         ];
-
-        // Remove duplicates (keep first occurrence)
-        const uniquePosts = allPosts.filter(
-            (post, index, self) => self.findIndex(p => p.id === post.id) === index
+        const connectionIds = new Set(connectionPool.map(post => post.id));
+        const uniqueBoosted = sortedBoosted.filter(
+            post => !connectionIds.has(post.id)
+        );
+        const boostedIds = new Set(uniqueBoosted.map(post => post.id));
+        const publicWithoutBoosted = taggedPublicPosts.filter(
+            post => !boostedIds.has(post.id)
         );
 
-        // Sort by created_at DESC (newest first)
-        const sortedPosts = uniquePosts.sort((a, b) => {
+        // Organic pool ordered newest first
+        const uniqueOrganic = [
+            ...connectionPool,
+            ...publicWithoutBoosted,
+        ].filter(
+            (post, index, self) => self.findIndex(p => p.id === post.id) === index
+        );
+        const sortedOrganic = uniqueOrganic.sort((a, b) => {
             const dateA = new Date(a.created_at).getTime();
             const dateB = new Date(b.created_at).getTime();
             return dateB - dateA; // Descending order (newest first)
         });
+
+        // Merge with guaranteed paid slots: boost i lands at absolute stream
+        // position BOOST_SLOT_START + i * BOOST_SLOT_INTERVAL, so the first
+        // boost is visible on page 1 and further boosts spread across pages.
+        const BOOST_SLOT_START = 2; // third item of the merged feed
+        const BOOST_SLOT_INTERVAL = 5;
+        const merged: any[] = [];
+        let organicCursor = 0;
+        let boostCursor = 0;
+        while (
+            organicCursor < sortedOrganic.length ||
+            boostCursor < uniqueBoosted.length
+        ) {
+            const nextBoostSlot =
+                BOOST_SLOT_START + boostCursor * BOOST_SLOT_INTERVAL;
+            if (
+                boostCursor < uniqueBoosted.length &&
+                merged.length === nextBoostSlot
+            ) {
+                merged.push(uniqueBoosted[boostCursor++]);
+            } else if (organicCursor < sortedOrganic.length) {
+                merged.push(sortedOrganic[organicCursor++]);
+            } else {
+                // Organic pool exhausted — append remaining boosts
+                merged.push(uniqueBoosted[boostCursor++]);
+            }
+        }
 
         // Apply pagination offset
         const startIndex = (page - 1) * limit;
         const endIndex = startIndex + limit;
 
         // Return paginated results
-        return sortedPosts.slice(startIndex, endIndex);
+        return merged.slice(startIndex, endIndex);
     };
 
     /**
@@ -540,7 +608,7 @@ export class PostService {
               *, 
               post_media(*), 
               users!inner(username, first_name, last_name, profile_picture),
-              post_boosts!inner(status, city, country, expires_at)
+              post_boosts!inner(status, city, country, expires_at, created_at)
             `
                         )
                         .eq("post_boosts.status", BoostStatus.ACTIVE)

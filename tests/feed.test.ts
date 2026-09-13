@@ -539,7 +539,11 @@ describe("Feed Posts System", () => {
         // Friend posts should come first
         expect(result[0].feed_type).toBe("friends");
         expect(result[1].feed_type).toBe("friends");
-        expect(result[2].feed_type).toBe("friends");
+        
+        // Boosted post gets a guaranteed paid slot (3rd position of page 1)
+        // instead of being sorted by its original creation date
+        expect(result[2].feed_type).toBe("boosted");
+        expect(result[2].id).toBe("boost1");
         
         // Should contain all provided friend posts
         const friendPostsInResult = result.filter(p => p.feed_type === "friends");
